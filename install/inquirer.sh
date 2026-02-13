@@ -19,7 +19,9 @@ function inqMenu() {
     done
 
     local SELECTED_OPTION=$(kdialog --menu "$DIALOG_TEXT" "${OPTIONS[@]}" --title "Menu" 2>/dev/null)
-    if [ $? -ne 0 ]; then
+    local EXIT_STATUS=$?
+    if [ $EXIT_STATUS -ne 0 ]; then
+        echo "Aborted by user."
         exit 0
     fi
 
@@ -39,7 +41,9 @@ function inqChkBx() {
     done
 
     local SELECTED_OPTIONS=$(kdialog --checklist "$DIALOG_TEXT" "${OPTIONS[@]}" --title "Checkbox" 2>/dev/null)
-    if [ $? -ne 0 ]; then
+    local EXIT_STATUS=$?
+    if [ $EXIT_STATUS -ne 0 ]; then
+        echo "Aborted by user."
         exit 0
     fi
 
