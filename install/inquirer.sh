@@ -11,17 +11,25 @@ function inqMenu() {
     local -n INPUT_OPTIONS="$2"
     local -n RETURN_STRING="$3"
 
-    local OPTIONS_STR=""
+    # Create options for kdialog
+    local OPTIONS=()
+    local i=1
     for OPTION in "${INPUT_OPTIONS[@]}"; do
-        OPTIONS_STR+="$OPTION \"$OPTION\" "
+        OPTIONS+=("$i" "$OPTION")
+        ((i++))
     done
 
-    RETURN_STRING=$(kdialog --menu "$DIALOG_TEXT" $OPTIONS_STR --title "Menu" 2>/dev/null)
+    # Show menu and get selection
+    local SELECTED_OPTION=$(kdialog --menu "$DIALOG_TEXT" "${OPTIONS[@]}" --title "Menu" 2>/dev/null)
     if [ $? -ne 0 ]; then
         echo "Abgebrochen"
         exit 0
     fi
 
+    # Set return value (subtract 1 because array is 0-based)
+    RETURN_STRING="${INPUT_OPTIONS[$((SELECTED_OPTION - 1))]}"
+
+    # Print selection
     echo -e "${ANSI_LIGHT_GREEN}Q) ${ANSI_CLEAR_TEXT}${ANSI_LIGHT_BLUE}${DIALOG_TEXT}${ANSI_CLEAR_TEXT} --> ${ANSI_LIGHT_GREEN}${RETURN_STRING}${ANSI_CLEAR_TEXT}"
 }
 
@@ -30,17 +38,20 @@ function inqChkBx() {
     local -n INPUT_OPTIONS="$2"
     local -n RETURN_ARRAY="$3"
 
-    local OPTIONS_STR=""
+    # Create options for kdialog
+    local OPTIONS=()
     for OPTION in "${INPUT_OPTIONS[@]}"; do
-        OPTIONS_STR+="$OPTION \"$OPTION\" off "
+        OPTIONS+=("$OPTION" "$OPTION" "off")
     done
 
-    local SELECTED_OPTIONS_STRING=$(kdialog --checklist "$DIALOG_TEXT" $OPTIONS_STR --title "Checkbox" 2>/dev/null)
+    # Show checklist and get selections
+    local SELECTED_OPTIONS=$(kdialog --checklist "$DIALOG_TEXT" "${OPTIONS[@]}" --title "Checkbox" 2>/dev/null)
     if [ $? -ne 0 ]; then
         echo "Abgebrochen"
         exit 0
     fi
 
+    # Convert selected options to array
     local IFS=$'\n'
-    RETURN_ARRAY=($(echo "$SELECTED_OPTIONS_STRING" | sed 's/^"//;s/"$//'))
+    RETURN_ARRAY=($(echo "$SELECTED_OPTIONS" | sed 's/^"//;s/"$//'))
 }
