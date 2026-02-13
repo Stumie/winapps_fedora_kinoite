@@ -199,6 +199,8 @@ Together, these components form a powerful and flexible virtualization stack, wi
     ```
 
 13. In the 'Memory' section, set the `Current allocation` to the minimum amount of memory you want the virtual machine to use, with a recommended value of `1024MB`.
+> [!NOTE]
+> Depending upon certain apps (like OneDrive), the balloon driver cannot keep up. If you are having segfaults (random reboots), turn off memory ballooning. `<memballoon model="none"/>`
 
 <p align="center">
     <img src="./libvirt_images/10.png" width="500px"/>
@@ -217,6 +219,8 @@ Together, these components form a powerful and flexible virtualization stack, wi
 </p>
 
 16. Navigate to 'NIC' and set the `Device model` type to `virtio` to enable paravirtualised networking.
+> [!NOTE]
+> `virtio` is the recommended device model and should be used for normal operation. If you specifically want internet access during the Windows installation (for example, to sign in with a Microsoft account), you may temporarily set the device model to `e1000e`. After installation and VirtIO driver setup are complete, switch the NIC back to `virtio` for best performance.
 
 <p align="center">
     <img src="./libvirt_images/13.png" width="500px"/>
@@ -664,7 +668,7 @@ You can then test whether the host GNU/Linux system can communicate with Windows
 }
 ```
 
-Next, you will need to make some registry changes to enable RDP Applications to run on the system. Start by downloading the [RDPApps.reg](../oem/RDPApps.reg) file, right-clicking on the `Raw` button, and clicking on `Save target as`. Repeat the same thing for the [install.bat](../oem/install.bat) and the [NetProfileCleanup.ps1](../oem/NetProfileCleanup.ps1). **Do not download 'Container.reg'** - this file is only required for users using docker or podman.
+Next, you will need to make some registry changes to enable RDP Applications to run on the system. Start by downloading the [RDPApps.reg](../oem/RDPApps.reg) file, right-clicking on the `Raw` button, and clicking on `Save target as`. Repeat the same thing for the [install.bat](../oem/install.bat), the [TimeSync.ps1](../oem/TimeSync.ps1) and the [NetProfileCleanup.ps1](../oem/NetProfileCleanup.ps1). **Do not download 'Container.reg'** - this file is only required for users using docker or podman.
 
 <p align="center">
     <img src="./libvirt_images/26.png" width="700px"/>

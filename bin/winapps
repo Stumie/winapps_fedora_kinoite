@@ -27,6 +27,8 @@ readonly CONFIG_PATH="${HOME}/.config/winapps/winapps.conf"
 readonly COMPOSE_PATH="${HOME}/.config/winapps/compose.yaml"
 # shellcheck disable=SC2155 # Silence warnings regarding masking return values through simultaneous declaration and assignment.
 readonly SCRIPT_DIR_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+readonly SLEEP_DETECT_PATH="${APPDATA_PATH}/last_activity"
+readonly SLEEP_MARKER="${APPDATA_PATH}/sleep_marker"
 
 # OTHER
 readonly CONTAINER_NAME="WinApps" # FOR 'docker' AND 'podman' ONLY
@@ -51,6 +53,9 @@ AUTOPAUSE="off"
 AUTOPAUSE_TIME="300"
 DEBUG="true"
 BOOT_TIMEOUT=120
+HIDEF="on"
+RDP_FLAGS_WINDOWS=""
+RDP_FLAGS_NON_WINDOWS=""
 
 # OTHER
 FREERDP_PID=-1
@@ -322,28 +327,28 @@ function waCheckVMRunning() {
 
     # Attempt to run the Windows virtual machine.
     # Note: States 'running' and 'idle' do not require intervention, and are not checked for.
-    if (virsh list --all --name | xargs | grep -wq "$VM_NAME"); then
-        if (virsh list --state-shutoff --name | xargs | grep -wq "$VM_NAME"); then
+    if (virsh list --all --name | grep -Fxq -- "$VM_NAME"); then
+        if (virsh list --state-shutoff --name | grep -Fxq -- "$VM_NAME"); then
             dprint "WINDOWS SHUT OFF. BOOTING WINDOWS."
             notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Booting Windows."
             NEEDED_BOOT=true
             virsh start "$VM_NAME" &>/dev/null || EXIT_STATUS=$EC_FAIL_START
-            if (virsh list --state-paused --name | xargs | grep -wq "$VM_NAME"); then
+            if (virsh list --state-paused --name | grep -Fxq -- "$VM_NAME"); then
                 dprint "WINDOWS PAUSED. RESUMING WINDOWS."
                 notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Resuming Windows."
                 virsh resume "$VM_NAME" &>/dev/null || EXIT_STATUS=$EC_FAIL_RESUME
             fi
-        elif (virsh list --state-paused --name | xargs | grep -wq "$VM_NAME"); then
+        elif (virsh list --state-paused --name | grep -Fxq -- "$VM_NAME"); then
             dprint "WINDOWS PAUSED. RESUMING WINDOWS."
             notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Resuming Windows."
             virsh resume "$VM_NAME" &>/dev/null || EXIT_STATUS=$EC_FAIL_RESUME
-        elif (virsh list --state-other --name | xargs | grep -wq "$VM_NAME"); then
-            if (virsh domstate "$VM_NAME" | xargs | grep -wq "shutdown"); then
+        elif (virsh list --state-other --name | grep -Fxq -- "$VM_NAME"); then
+            if (virsh domstate "$VM_NAME" | grep -Fxq "in shutdown"); then
                 dprint "WINDOWS SHUTTING DOWN. WAITING."
                 notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Windows is currently shutting down.\nIt will automatically restart once the shutdown process is complete."
                 EXIT_STATUS=$EC_SD_TIMEOUT
                 while (( TIME_ELAPSED < TIME_LIMIT )); do
-                    if (virsh list --state-shutoff --name | xargs | grep -wq "$VM_NAME"); then
+                    if (virsh list --state-shutoff --name | grep -Fxq -- "$VM_NAME"); then
                         EXIT_STATUS=0
                         dprint "WINDOWS SHUT OFF. BOOTING WINDOWS."
                         notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Booting Windows."
@@ -354,7 +359,7 @@ function waCheckVMRunning() {
                     sleep $TIME_INTERVAL
                     TIME_ELAPSED=$((TIME_ELAPSED + TIME_INTERVAL))
                 done
-            elif (virsh domstate "$VM_NAME" | xargs | grep -wq "crashed"); then
+            elif (virsh domstate "$VM_NAME" | grep -Fxq "crashed"); then
                 dprint "WINDOWS CRASHED. DESTROYING WINDOWS."
                 notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Windows experienced an unexpected crash.\nAttempting to restart Windows."
                 virsh destroy "$VM_NAME" &>/dev/null || EXIT_STATUS=$EC_FAIL_DESTROY
@@ -364,12 +369,12 @@ function waCheckVMRunning() {
                     virsh start "$VM_NAME" &>/dev/null || EXIT_STATUS=$EC_FAIL_START
                     NEEDED_BOOT=true
                 fi
-            elif (virsh domstate "$VM_NAME" | xargs | grep -wq "dying"); then
+            elif (virsh domstate "$VM_NAME" | grep -Fxq "dying"); then
                 dprint "WINDOWS DYING. WAITING."
                 notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Windows is currently shutting down unexpectedly.\nIt will try to restart once the shutdown process finishes."
                 EXIT_STATUS=$EC_DIE_TIMEOUT
                 while (( TIME_ELAPSED < TIME_LIMIT )); do
-                    if (virsh domstate "$VM_NAME" | xargs | grep -wq "crashed"); then
+                    if (virsh domstate "$VM_NAME" | grep -Fxq "crashed"); then
                         EXIT_STATUS=0
                         dprint "WINDOWS CRASHED. DESTROYING WINDOWS."
                         notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Windows experienced an unexpected crash.\nAttempting to restart Windows."
@@ -381,7 +386,7 @@ function waCheckVMRunning() {
                             NEEDED_BOOT=true
                         fi
                         break
-                    elif (virsh list --state-shutoff --name | xargs | grep -wq "$VM_NAME"); then
+                    elif (virsh list --state-shutoff --name | grep -Fxq -- "$VM_NAME"); then
                         EXIT_STATUS=0
                         dprint "WINDOWS SHUT OFF. BOOTING WINDOWS."
                         notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Booting Windows."
@@ -392,7 +397,7 @@ function waCheckVMRunning() {
                     sleep $TIME_INTERVAL
                     TIME_ELAPSED=$((TIME_ELAPSED + TIME_INTERVAL))
                 done
-            elif (virsh domstate "$VM_NAME" | xargs | grep -wq "pmsuspended" ); then
+            elif (virsh domstate "$VM_NAME" | grep -Fxq "pmsuspended" ); then
                 dprint "WINDOWS SUSPENDED. RESUMING WINDOWS."
                 virsh resume "$VM_NAME" &>/dev/null || EXIT_STATUS=$EC_FAIL_RESUME
             fi
@@ -413,7 +418,7 @@ function waCheckVMRunning() {
 
         while (( TIME_ELAPSED < BOOT_TIMEOUT )); do
             # Check if VM is running
-            if (virsh list --state-running --name | xargs | grep -wq "$VM_NAME"); then
+            if (virsh list --state-running --name | grep -Fxq -- "$VM_NAME"); then
                 # Try to connect to RDP port to verify it's ready
                 if timeout 1 bash -c ">/dev/tcp/$RDP_IP/$RDP_PORT" 2>/dev/null; then
                     dprint "VM IS READY"
@@ -605,7 +610,9 @@ function waRunCommand() {
 
         # Open Windows RDP session.
         dprint "WINDOWS"
+        # shellcheck disable=SC2086 #Disable warning for globbing and word splitting
         $FREERDP_COMMAND \
+            $RDP_FLAGS_WINDOWS \
             /d:"$RDP_DOMAIN" \
             /u:"$RDP_USER" \
             /p:"$RDP_PASS" \
@@ -621,13 +628,15 @@ function waRunCommand() {
     elif [ "$1" = "manual" ]; then
         # Open specified application.
         dprint "MANUAL: ${2}"
+        # shellcheck disable=SC2086 #Disable warning for globbing and word splitting
         $FREERDP_COMMAND \
+            $RDP_FLAGS_NON_WINDOWS \
             /d:"$RDP_DOMAIN" \
             /u:"$RDP_USER" \
             /p:"$RDP_PASS" \
             /scale:"$RDP_SCALE" \
             +auto-reconnect \
-            /app:program:"$2" \
+            /app:program:"$2",hidef:"$HIDEF" \
             /v:"$RDP_IP" &>/dev/null &
 
         # Capture the process ID.
@@ -653,14 +662,16 @@ function waRunCommand() {
         # Check if a file path was specified, and pass this to the application.
         if [ -z "$2" ]; then
             # No file path specified.
+            # shellcheck disable=SC2086 #Disable warning for globbing and word splitting
             $FREERDP_COMMAND \
+               $RDP_FLAGS_NON_WINDOWS \
                 /d:"$RDP_DOMAIN" \
                 /u:"$RDP_USER" \
                 /p:"$RDP_PASS" \
                 /scale:"$RDP_SCALE" \
                 +auto-reconnect \
                 /wm-class:"$FULL_NAME" \
-                /app:program:"$WIN_EXECUTABLE",icon:"$ICON",name:"$FULL_NAME" \
+                /app:program:"$WIN_EXECUTABLE",hidef:"$HIDEF",icon:"$ICON",name:"$FULL_NAME" \
                 /v:"$RDP_IP" &>/dev/null &
 
             # Capture the process ID.
@@ -674,7 +685,9 @@ function waRunCommand() {
             dprint "UNIX_FILE_PATH: ${2}"
             dprint "WINDOWS_FILE_PATH: ${FILE_PATH}"
 
+            # shellcheck disable=SC2086 #Disable warning for globbing and word splitting
             $FREERDP_COMMAND \
+               $RDP_FLAGS_NON_WINDOWS \
                 /d:"$RDP_DOMAIN" \
                 /u:"$RDP_USER" \
                 /p:"$RDP_PASS" \
@@ -682,7 +695,7 @@ function waRunCommand() {
                 +auto-reconnect \
                 /drive:media,"$REMOVABLE_MEDIA" \
                 /wm-class:"$FULL_NAME" \
-                /app:program:"$WIN_EXECUTABLE",icon:"$ICON",name:"$FULL_NAME",cmd:\""$FILE_PATH"\" \
+                /app:program:"$WIN_EXECUTABLE",hidef:"$HIDEF",icon:"$ICON",name:"$FULL_NAME",cmd:\""$FILE_PATH"\" \
                 /v:"$RDP_IP" &>/dev/null &
 
             # Capture the process ID.
@@ -740,13 +753,57 @@ function waCheckIdle() {
     fi
 }
 
+# Name: 'waTimeSync'
+# Role: Detect if system went to sleep by comparing uptime progression, then sync time in Windows VM
+function waTimeSync() {
+    local CURRENT_TIME
+    local CURRENT_UPTIME
+    local STORED_TIME=0
+    local STORED_UPTIME=0
+    local EXPECTED_UPTIME=0
+    local UPTIME_DIFF=0
+
+    CURRENT_TIME=$(date +%s)
+    CURRENT_UPTIME=$(awk '{print int($1)}' /proc/uptime)
+
+    # Read stored values if file exists
+    if [ -f "$SLEEP_DETECT_PATH" ]; then
+        STORED_TIME=$(head -n1 "$SLEEP_DETECT_PATH" 2>/dev/null || echo 0)
+        STORED_UPTIME=$(tail -n1 "$SLEEP_DETECT_PATH" 2>/dev/null || echo 0)
+    fi
+
+    if [ "$STORED_TIME" -gt 0 ] && [ "$STORED_UPTIME" -gt 0 ]; then
+        # Calculate what uptime should be now
+        EXPECTED_UPTIME=$((STORED_UPTIME + CURRENT_TIME - STORED_TIME))
+        UPTIME_DIFF=$((EXPECTED_UPTIME - CURRENT_UPTIME))
+
+        dprint "UPTIME_DIFF: ${UPTIME_DIFF} seconds"
+
+        # If uptime is significantly less than expected, system likely slept
+        if [[ "$UPTIME_DIFF" -gt 30 && ! -f "$SLEEP_MARKER" ]]; then
+            dprint "DETECTED SLEEP/WAKE CYCLE (uptime gap: ${UPTIME_DIFF}s). CREATING SLEEP MARKER TO SYNC WINDOWS TIME."
+
+            # Create sleep marker which will be monitored by Windows VM to trigger time sync
+            touch "$SLEEP_MARKER"
+
+            dprint "CREATED SLEEP MARKER"
+        fi
+    fi
+
+    # Store current values
+    {
+        echo "$CURRENT_TIME"
+        echo "$CURRENT_UPTIME"
+    } > "$SLEEP_DETECT_PATH"
+}
+
 ### MAIN LOGIC ###
 #set -x # Enable for debugging.
+mkdir -p "$APPDATA_PATH"
 dprint "START"
 dprint "SCRIPT_DIR: ${SCRIPT_DIR_PATH}"
 dprint "SCRIPT_ARGS: ${*}"
 dprint "HOME_DIR: ${HOME}"
-mkdir -p "$APPDATA_PATH"
 waLastRun
 waLoadConfig
 waGetFreeRDPCommand
@@ -770,6 +827,7 @@ else
 fi
 
 waCheckPortOpen
+waTimeSync
 waRunCommand "$@"
 
 if [[ "$AUTOPAUSE" == "on" ]]; then

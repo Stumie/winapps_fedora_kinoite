@@ -82,6 +82,7 @@ OPT_SYSTEM=0    # Set to '1' if the user specifies '--system'.
 OPT_USER=0      # Set to '1' if the user specifies '--user'.
 OPT_UNINSTALL=0 # Set to '1' if the user specifies '--uninstall'.
 OPT_AOSA=0      # Set to '1' if the user specifies '--setupAllOfficiallySupportedApps'.
+OPT_ADD_APPS=0  # Set to '1' if the user specifies '--add-apps'.
 
 # WINAPPS CONFIGURATION FILE
 RDP_USER=""          # Imported variable.
@@ -116,7 +117,7 @@ trap "waTerminateScript" ERR # Catch non-zero return values.
 ### FUNCTIONS ###
 # Name: 'waTerminateScript'
 # Role: Terminates the script when a non-zero return value is encountered.
-# shellcheck disable=SC2317 # Silence warning regarding this function being unreachable.
+# shellcheck disable=SC2329 # Silence warning regarding this function never being invoked (shellCheck is currently bad at figuring out functions that are invoked via trap).
 function waTerminateScript() {
     # Store the non-zero exit status received by the trap.
     local EXIT_STATUS=$?
@@ -127,7 +128,6 @@ function waTerminateScript() {
     # Terminate the script.
     exit "$EXIT_STATUS"
 }
-
 # Name: 'waUsage'
 # Role: Displays usage information for the script.
 function waUsage() {
@@ -138,8 +138,11 @@ function waUsage() {
   ${COMMAND_TEXT}    --system --setupAllOfficiallySupportedApps${CLEAR_TEXT}    # Install WinApps and all officially supported applications in /usr
   ${COMMAND_TEXT}    --user --uninstall${CLEAR_TEXT}                            # Uninstall everything in ${HOME}
   ${COMMAND_TEXT}    --system --uninstall${CLEAR_TEXT}                          # Uninstall everything in /usr
+  ${COMMAND_TEXT}    --user --add-apps${CLEAR_TEXT}                             # Add new applications to existing installation in ${HOME}
+  ${COMMAND_TEXT}    --system --add-apps${CLEAR_TEXT}                           # Add new applications to existing installation in /usr
   ${COMMAND_TEXT}    --help${CLEAR_TEXT}                                        # Display this usage message."
 }
+
 
 # Name: 'waGetSourceCode'
 # Role: Grab the WinApps source code using Git.
@@ -227,6 +230,9 @@ function waCheckInput() {
                 ;;
             "--uninstall")
                 OPT_UNINSTALL=1
+                ;;
+            "--add-apps")
+                OPT_ADD_APPS=1
                 ;;
             "--help")
                 waUsage
@@ -319,6 +325,40 @@ function waCheckInput() {
         return "$EC_BAD_ARGUMENT"
     fi
 
+    # Simultaneous 'Uninstall' and 'Add Apps'.
+    if [ "$OPT_UNINSTALL" -eq 1 ] && [ "$OPT_ADD_APPS" -eq 1 ]; then
+        # Display the error type.
+        echo -e "${ERROR_TEXT}ERROR:${CLEAR_TEXT} ${BOLD_TEXT}CONFLICTING ARGUMENTS.${CLEAR_TEXT}"
+
+        # Display the error details.
+        echo -e "${INFO_TEXT}You cannot specify both${CLEAR_TEXT} ${COMMAND_TEXT}--uninstall${CLEAR_TEXT} ${INFO_TEXT}and${CLEAR_TEXT} ${COMMAND_TEXT}--add-apps${CLEAR_TEXT} ${INFO_TEXT}simultaneously.${CLEAR_TEXT}"
+
+        # Display the suggested action(s).
+        echo "--------------------------------------------------------------------------------"
+        waUsage
+        echo "--------------------------------------------------------------------------------"
+
+        # Terminate the script.
+        return "$EC_BAD_ARGUMENT"
+    fi
+
+    # Simultaneous 'AOSA' and 'Add Apps'.
+    if [ "$OPT_AOSA" -eq 1 ] && [ "$OPT_ADD_APPS" -eq 1 ]; then
+        # Display the error type.
+        echo -e "${ERROR_TEXT}ERROR:${CLEAR_TEXT} ${BOLD_TEXT}CONFLICTING ARGUMENTS.${CLEAR_TEXT}"
+
+        # Display the error details.
+        echo -e "${INFO_TEXT}You cannot specify both${CLEAR_TEXT} ${COMMAND_TEXT}--setupAllOfficiallySupportedApps${CLEAR_TEXT} ${INFO_TEXT}and${CLEAR_TEXT} ${COMMAND_TEXT}--add-apps${CLEAR_TEXT} ${INFO_TEXT}simultaneously.${CLEAR_TEXT}"
+
+        # Display the suggested action(s).
+        echo "--------------------------------------------------------------------------------"
+        waUsage
+        echo "--------------------------------------------------------------------------------"
+
+        # Terminate the script.
+        return "$EC_BAD_ARGUMENT"
+    fi
+
     # No 'User' or 'System'.
     if [ "$OPT_SYSTEM" -eq 0 ] && [ "$OPT_USER" -eq 0 ]; then
         # Display the error type.
@@ -372,12 +412,47 @@ function waConfigurePathsAndPermissions() {
         }
     fi
 }
-
 # Name: 'waCheckExistingInstall'
 # Role: Identifies any existing WinApps installations that may conflict with the new installation.
 function waCheckExistingInstall() {
     # Print feedback.
     echo -n "Checking for existing conflicting WinApps installations... "
+
+    # If --add-apps is specified, we don't want to fail if an installation exists
+    if [ "$OPT_ADD_APPS" -eq 1 ]; then
+        # Check for an existing 'user' installation.
+        if [[ -f "${USER_BIN_PATH}/winapps" && -d "${USER_SOURCE_PATH}/winapps" ]]; then
+            # Complete the previous line.
+            echo -e "${DONE_TEXT}Found!${CLEAR_TEXT}"
+            echo -e "${INFO_TEXT}Adding new applications to existing user installation.${CLEAR_TEXT}"
+            return 0
+        fi
+
+        # Check for an existing 'system' installation.
+        if [[ -f "${SYS_BIN_PATH}/winapps" && -d "${SYS_SOURCE_PATH}/winapps" ]]; then
+            # Complete the previous line.
+            echo -e "${DONE_TEXT}Found!${CLEAR_TEXT}"
+            echo -e "${INFO_TEXT}Adding new applications to existing system installation.${CLEAR_TEXT}"
+            return 0
+        fi
+
+        # If we're adding apps but no installation exists, that's an error
+        echo -e "${FAIL_TEXT}Failed!${CLEAR_TEXT}\n"
+
+        # Display the error type.
+        echo -e "${ERROR_TEXT}ERROR:${CLEAR_TEXT} ${BOLD_TEXT}NO EXISTING WINAPPS INSTALLATION.${CLEAR_TEXT}"
+
+        # Display the error details.
+        echo -e "${INFO_TEXT}No existing WinApps installation was detected.${CLEAR_TEXT}"
+
+        # Display the suggested action(s).
+        echo "--------------------------------------------------------------------------------"
+        echo -e "Please install WinApps first using ${COMMAND_TEXT}winapps-setup --user${CLEAR_TEXT} or ${COMMAND_TEXT}winapps-setup --system${CLEAR_TEXT}."
+        echo "--------------------------------------------------------------------------------"
+
+        # Terminate the script.
+        return "$EC_EXISTING_INSTALL"
+    fi
 
     # Check for an existing 'user' installation.
     if [[ -f "${USER_BIN_PATH}/winapps" || -d "${USER_SOURCE_PATH}/winapps" ]]; then
@@ -422,6 +497,7 @@ function waCheckExistingInstall() {
     # Print feedback.
     echo -e "${DONE_TEXT}Done!${CLEAR_TEXT}"
 }
+
 
 # Name: 'waFixScale'
 # Role: Since FreeRDP only supports '/scale' values of 100, 140 or 180, find the closest supported argument to the user's configuration.
@@ -811,16 +887,13 @@ function waCheckVMRunning() {
     # Print feedback.
     echo -n "Checking the status of the Windows VM... "
 
-    # Declare variables.
-    local VM_STATE="" # Stores the state of the Windows VM.
-
     # Obtain VM Status
     VM_PAUSED=0
-    virsh list --state-paused | grep -wq "$VM_NAME" || VM_PAUSED="$?"
+    virsh list --state-paused --name | grep -Fxq -- "$VM_NAME" || VM_PAUSED="$?"
     VM_RUNNING=0
-    virsh list --state-running | grep -wq "$VM_NAME" || VM_RUNNING="$?"
+    virsh list --state-running --name | grep -Fxq -- "$VM_NAME" || VM_RUNNING="$?"
     VM_SHUTOFF=0
-    virsh list --state-shutoff | grep -wq "$VM_NAME" || VM_SHUTOFF="$?"
+    virsh list --state-shutoff --name | grep -Fxq -- "$VM_NAME" || VM_SHUTOFF="$?"
 
     if [[ $VM_SHUTOFF == "0" ]]; then
         # Complete the previous line.
@@ -1011,14 +1084,16 @@ function waCheckRDPAccess() {
     # If the file is created, it means Windows received the command via FreeRDP successfully and can read and write to the Linux home folder.
     # Note: The following final line is expected within the log, indicating successful execution of the 'tsdiscon' command and termination of the RDP session.
     # [INFO][com.freerdp.core] - [rdp_print_errinfo]: ERRINFO_LOGOFF_BY_USER (0x0000000C):The disconnection was initiated by the user logging off their session on the server.
-    # shellcheck disable=SC2140,SC2027 # Disable warnings regarding unquoted strings.
+    # shellcheck disable=SC2140,SC2027,SC2086 # Disable warnings regarding unquoted strings.
     $FREERDP_COMMAND \
+        $RDP_FLAGS_NON_WINDOWS \
         /cert:tofu \
         /d:"$RDP_DOMAIN" \
         /u:"$RDP_USER" \
         /p:"$RDP_PASS" \
         /scale:"$RDP_SCALE" \
         +auto-reconnect \
+        +home-drive \
         /app:program:"C:\Windows\System32\cmd.exe",cmd:"/C type NUL > $TEST_PATH_WIN && tsdiscon" \
         /v:"$RDP_IP" &>"$FREERDP_LOG" &
 
@@ -1126,7 +1201,7 @@ function waFindInstalled() {
         source "./apps/${APPLICATION}/info"
 
         # Append commands to batch file.
-        echo "IF EXIST \"${WIN_EXECUTABLE}\" ECHO ${APPLICATION} >> ${TMP_INST_FILE_PATH_WIN}" >>"$BATCH_SCRIPT_PATH"
+        echo "IF EXIST \"${WIN_EXECUTABLE}\" ECHO ${APPLICATION}^|^|^|${WIN_EXECUTABLE} >> ${TMP_INST_FILE_PATH_WIN}" >>"$BATCH_SCRIPT_PATH"
     done
 
     # Append a command to the batch script to run the PowerShell script and store its output in the 'detected' file.
@@ -1142,14 +1217,16 @@ function waFindInstalled() {
     # Silently execute the batch script within Windows in the background (Log Output To File)
     # Note: The following final line is expected within the log, indicating successful execution of the 'tsdiscon' command and termination of the RDP session.
     # [INFO][com.freerdp.core] - [rdp_print_errinfo]: ERRINFO_LOGOFF_BY_USER (0x0000000C):The disconnection was initiated by the user logging off their session on the server.
-    # shellcheck disable=SC2140,SC2027 # Disable warnings regarding unquoted strings.
+    # shellcheck disable=SC2140,SC2027,SC2086 # Disable warnings regarding unquoted strings.
     $FREERDP_COMMAND \
+        $RDP_FLAGS_NON_WINDOWS \
         /cert:tofu \
         /d:"$RDP_DOMAIN" \
         /u:"$RDP_USER" \
         /p:"$RDP_PASS" \
         /scale:"$RDP_SCALE" \
         +auto-reconnect \
+        +home-drive \
         /app:program:"C:\Windows\System32\cmd.exe",cmd:"/C "$BATCH_SCRIPT_PATH_WIN"" \
         /v:"$RDP_IP" &>"$FREERDP_LOG" &
 
@@ -1227,7 +1304,7 @@ StartupWMClass=Microsoft Windows
 Comment=Microsoft Windows RDP Session"
 
     # Copy the 'Windows' icon.
-    $SUDO cp "./icons/windows.svg" "${APPDATA_PATH}/icons/windows.svg"
+    $SUDO cp "./install/windows.svg" "${APPDATA_PATH}/icons/windows.svg"
 
     # Write the desktop entry content to a file.
     echo "$WIN_DESKTOP" | $SUDO tee "${APP_PATH}/windows.desktop" &>/dev/null
@@ -1303,17 +1380,36 @@ function waConfigureOfficiallySupported() {
 
     # Create application entries for each officially supported application.
     for OSA in "${OSA_LIST[@]}"; do
-        # Print feedback.
-        echo -n "Creating an application entry for ${OSA}... "
+        # Split the line by the '|||' delimiter
+        local APP_NAME="${OSA%%|||*}"
+        local ACTUAL_WIN_EXECUTABLE="${OSA##*|||}"
 
-        # Copy application icon and information.
-        $SUDO cp -r "./apps/${OSA}" "${APPDATA_PATH}/apps"
+        # If splitting failed for some reason, skip this line to be safe.
+        if [[ -z "$APP_NAME" || -z "$ACTUAL_WIN_EXECUTABLE" ]]; then
+            continue
+        fi
 
-        # Configure the application.
-        waConfigureApp "$OSA" svg
+        # Print feedback using the clean application name.
+        echo -n "Creating an application entry for ${APP_NAME}... "
+
+        # Copy the original, unmodified application assets.
+        # --no-preserve=mode is needed to avoid missing write permissions when copying from Nix store.
+        $SUDO cp -r --no-preserve=mode "./apps/${APP_NAME}" "${APPDATA_PATH}/apps"
+
+        local DESTINATION_INFO_FILE="${APPDATA_PATH}/apps/${APP_NAME}/info"
+
+        # Sanitize the string using pure Bash. This is fast and safe.
+        local SED_SAFE_PATH="${ACTUAL_WIN_EXECUTABLE//&/\\&}"
+        SED_SAFE_PATH="${SED_SAFE_PATH//\\/\\\\}"
+
+        # Use the sanitized string to safely edit the file.
+        $SUDO sed -i "s|^WIN_EXECUTABLE=.*|WIN_EXECUTABLE=\"${SED_SAFE_PATH}\"|" "$DESTINATION_INFO_FILE"
+
+        # Configure the application using the clean name.
+        waConfigureApp "$APP_NAME" svg
 
         # Check if the application is an Office app and copy the protocol handler.
-        if [[ " ${OFFICE_APPS[*]} " == *" $OSA "* ]]; then
+        if [[ " ${OFFICE_APPS[*]} " == *" $APP_NAME "* ]]; then
             # Determine the target directory based on whether the installation is for the system or user.
             if [[ "$OPT_SYSTEM" -eq 1 ]]; then
                 TARGET_DIR="$SYS_APP_PATH"
@@ -1343,6 +1439,7 @@ function waConfigureApps() {
     local APP_INSTALL=""   # Stores the option selected by the user.
     local SELECTED_APPS=() # Stores the officially supported applications selected by the user.
     local TEMP_ARRAY=()    # Temporary array used for sorting elements of an array.
+    declare -A APP_DATA_MAP # Associative array to map short names back to their full data line.
 
     # Read the list of officially supported applications that are installed on Windows into an array, returning an empty array if no such files exist.
     # This will remove leading and trailing whitespace characters as well as ignore empty lines.
@@ -1357,14 +1454,28 @@ function waConfigureApps() {
         # - Executable Path               (WIN_EXECUTABLE)
         # - Supported MIME Types          (MIME_TYPES)
         # - Application Icon              (ICON)
+
+        # Split the line to get the clean application name
+        local APP_NAME="${OSA%%|||*}"
+        local ACTUAL_WIN_EXECUTABLE="${OSA##*|||*}"
+
+        # If splitting failed, skip this entry.
+        if [[ -z "$APP_NAME" ]]; then
+            continue
+        fi
+
+        # Use the clean APP_NAME to source the info file
         # shellcheck source=/dev/null # Exclude this file from being checked by ShellCheck.
-        source "./apps/${OSA}/info"
+        source "./apps/${APP_NAME}/info"
 
         # Add both the simplified and full name of the application to an array.
-        APPS+=("${FULL_NAME} (${OSA})")
+        APPS+=("${FULL_NAME} (${APP_NAME})")
+
+        # Store the original data line in our map so we can retrieve it later.
+        APP_DATA_MAP["$APP_NAME"]="$OSA"
 
         # Extract the executable file name (e.g. 'MyApp.exe') from the absolute path.
-        WIN_EXECUTABLE="${WIN_EXECUTABLE##*\\}"
+        WIN_EXECUTABLE="${ACTUAL_WIN_EXECUTABLE##*\\}"
 
         # Trim any leading or trailing whitespace characters from the executable file name.
         read -r WIN_EXECUTABLE <<<"$(echo "$WIN_EXECUTABLE" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
@@ -1399,11 +1510,11 @@ function waConfigureApps() {
         for SELECTED_APP in "${SELECTED_APPS[@]}"; do
             # Capture the substring within (but not including) the parentheses.
             # This substring represents the officially supported application name (see above loop).
-            SELECTED_APP="${SELECTED_APP##*(}"
-            SELECTED_APP="${SELECTED_APP%%)}"
+            local SHORT_NAME="${SELECTED_APP##*(}"
+            SHORT_NAME="${SHORT_NAME%%)}"
 
-            # Add the substring back to the 'install' file.
-            echo "$SELECTED_APP" >>"$INST_FILE_PATH"
+            # Use the map to find the original data line (e.g., "word|||C:\...") and write it back.
+            echo "${APP_DATA_MAP[$SHORT_NAME]}" >>"$INST_FILE_PATH"
         done
     fi
 
@@ -1733,6 +1844,83 @@ function waUninstall() {
     echo -e "${SUCCESS_TEXT}UNINSTALLATION COMPLETE.${CLEAR_TEXT}"
 }
 
+# Name: 'waAddApps'
+# Role: Adds new applications to an existing WinApps installation.
+function waAddApps() {
+    # Print feedback.
+    echo -e "${BOLD_TEXT}Adding new applications to existing WinApps installation.${CLEAR_TEXT}"
+
+    # Load the WinApps configuration file.
+    waLoadConfig
+
+    # Check for missing dependencies.
+    waCheckInstallDependencies
+
+    # Update $RDP_SCALE.
+    waFixScale
+
+    # Append additional FreeRDP flags if required.
+    if [[ -n $RDP_FLAGS ]]; then
+        FREERDP_COMMAND="${FREERDP_COMMAND} ${RDP_FLAGS}"
+    fi
+
+    # If using 'docker' or 'podman', set RDP_IP to localhost.
+    if [ "$WAFLAVOR" = "docker" ] || [ "$WAFLAVOR" = "podman" ]; then
+        RDP_IP="$DOCKER_IP"
+    fi
+
+    # If using podman backend, modify the FreeRDP command to enter a new namespace.
+    if [ "$WAFLAVOR" = "podman" ]; then
+        FREERDP_COMMAND="podman unshare --rootless-netns ${FREERDP_COMMAND}"
+    fi
+
+    if [ "$WAFLAVOR" = "docker" ] || [ "$WAFLAVOR" = "podman" ]; then
+        # Check if Windows is powered on.
+        waCheckContainerRunning
+    elif [ "$WAFLAVOR" = "libvirt" ]; then
+        # Verify the current user's group membership.
+        waCheckGroupMembership
+
+        # Check if the Windows VM is powered on.
+        waCheckVMRunning
+    elif [ "$WAFLAVOR" = "manual" ]; then
+        waCheckPortOpen
+    else
+        # Display the error type.
+        echo -e "${ERROR_TEXT}ERROR:${CLEAR_TEXT} ${BOLD_TEXT}INVALID WINAPPS BACKEND.${CLEAR_TEXT}"
+
+        # Display the error details.
+        echo -e "${INFO_TEXT}An invalid WinApps backend '${WAFLAVOR}' was specified.${CLEAR_TEXT}"
+
+        # Display the suggested action(s).
+        echo "--------------------------------------------------------------------------------"
+        echo -e "Please ensure 'WAFLAVOR' is set to 'docker', 'podman' or 'libvirt' in ${COMMAND_TEXT}${CONFIG_PATH}${CLEAR_TEXT}."
+        echo "--------------------------------------------------------------------------------"
+
+        # Terminate the script.
+        return "$EC_INVALID_FLAVOR"
+    fi
+
+    # Check if the RDP port on Windows is open.
+    waCheckPortOpen
+
+    # Test RDP access to Windows.
+    waCheckRDPAccess
+
+    # Check for installed applications.
+    waFindInstalled
+
+    # Configure officially supported applications.
+    waConfigureApps
+
+    # Configure other detected applications.
+    waConfigureDetectedApps
+    # Print feedback.
+    echo -e "${SUCCESS_TEXT}ADDING NEW APPS COMPLETE.${CLEAR_TEXT}"
+}
+
+
+
 ### SEQUENTIAL LOGIC ###
 # Welcome the user.
 echo -e "${BOLD_TEXT}\
@@ -1757,10 +1945,11 @@ waConfigurePathsAndPermissions
 
 # Get the source code
 waGetSourceCode
-
 # Install or uninstall WinApps.
 if [ "$OPT_UNINSTALL" -eq 1 ]; then
     waUninstall
+elif [ "$OPT_ADD_APPS" -eq 1 ]; then
+    waAddApps
 else
     waInstall
 fi
