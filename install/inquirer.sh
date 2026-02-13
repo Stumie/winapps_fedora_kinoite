@@ -19,7 +19,12 @@ function inqMenu() {
 
     # MAIN LOGIC.
     # Create a menu using kdialog
-    RETURN_STRING=$(kdialog --menu "$DIALOG_TEXT" "${INPUT_OPTIONS[@]}" --title "Menu" 2>/dev/null) || exit 0
+    local OPTIONS_STR=""
+    for OPTION in "${INPUT_OPTIONS[@]}"; do
+        OPTIONS_STR+="$OPTION \"$OPTION\" "
+    done
+
+    RETURN_STRING=$(kdialog --menu "$DIALOG_TEXT" $OPTIONS_STR --title "Menu" 2>/dev/null) || exit 0
 
     # Display question and response.
     echo -e "${ANSI_LIGHT_GREEN}Q) ${ANSI_CLEAR_TEXT}${ANSI_LIGHT_BLUE}${DIALOG_TEXT}${ANSI_CLEAR_TEXT} --> ${ANSI_LIGHT_GREEN}${RETURN_STRING}${ANSI_CLEAR_TEXT}"
@@ -33,7 +38,12 @@ function inqChkBx() {
 
     # MAIN LOGIC.
     # Create a checklist using kdialog
-    local SELECTED_OPTIONS_STRING=$(kdialog --checklist "$DIALOG_TEXT" "${INPUT_OPTIONS[@]}" --title "Checkbox" 2>/dev/null) || exit 0
+    local OPTIONS_STR=""
+    for OPTION in "${INPUT_OPTIONS[@]}"; do
+        OPTIONS_STR+="$OPTION \"$OPTION\" off "
+    done
+
+    local SELECTED_OPTIONS_STRING=$(kdialog --checklist "$DIALOG_TEXT" $OPTIONS_STR --title "Checkbox" 2>/dev/null) || exit 0
 
     # Convert the output string into an array.
     local IFS=$'\n'
