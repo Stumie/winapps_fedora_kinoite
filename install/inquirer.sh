@@ -20,11 +20,17 @@ function inqMenu() {
     # MAIN LOGIC.
     # Create a menu using kdialog
     local OPTIONS_STR=""
+    local i=1
     for OPTION in "${INPUT_OPTIONS[@]}"; do
-        OPTIONS_STR+="$OPTION \"$OPTION\" "
+        OPTIONS_STR+="$i \"$OPTION\" "
+        ((i++))
     done
 
-    RETURN_STRING=$(kdialog --menu "$DIALOG_TEXT" $OPTIONS_STR --title "Menu" 2>/dev/null) || exit 0
+    local SELECTED_OPTION=$(kdialog --menu "$DIALOG_TEXT" --separate-output $OPTIONS_STR --title "Menu" 2>/dev/null) || exit 0
+
+    # Map the selected number back to the option text
+    local index=$((SELECTED_OPTION - 1))
+    RETURN_STRING="${INPUT_OPTIONS[index]}"
 
     # Display question and response.
     echo -e "${ANSI_LIGHT_GREEN}Q) ${ANSI_CLEAR_TEXT}${ANSI_LIGHT_BLUE}${DIALOG_TEXT}${ANSI_CLEAR_TEXT} --> ${ANSI_LIGHT_GREEN}${RETURN_STRING}${ANSI_CLEAR_TEXT}"
