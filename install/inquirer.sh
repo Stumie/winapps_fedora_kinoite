@@ -19,6 +19,12 @@ function inqMenu() {
     declare -n INPUT_OPTIONS="$INPUT_OPTIONS_VAR" # Input array nameref.
     declare -n RETURN_STRING="$RETURN_STRING_VAR" # Output string nameref.
 
+    # Input validation: Check if options array is empty.
+    if [ ${#INPUT_OPTIONS[@]} -eq 0 ]; then
+        echo "Error: No options provided for menu." >&2
+        exit 1
+    fi
+
     # Other variables:
     declare -a KDIALOG_ARGS=()              # Arguments for kdialog --menu.
 
@@ -27,6 +33,8 @@ function inqMenu() {
     for OPTION in "${INPUT_OPTIONS[@]}"; do
         # Trim whitespace.
         OPTION=$(echo "$OPTION" | sed 's/^[ \t]*//;s/[ \t]*$//')
+        # Replace commas in option text to avoid breaking CSV parsing later.
+        OPTION=${OPTION//,/ }  # Replace commas with spaces.
         KDIALOG_ARGS+=("$OPTION" "$OPTION")  # tag and text are the same.
     done
 
@@ -48,6 +56,12 @@ function inqChkBx() {
     declare -n INPUT_OPTIONS="$INPUT_OPTIONS_VAR" # Input array nameref.
     declare -n RETURN_ARRAY="$RETURN_ARRAY_VAR"   # Output array nameref.
 
+    # Input validation: Check if options array is empty.
+    if [ ${#INPUT_OPTIONS[@]} -eq 0 ]; then
+        echo "Error: No options provided for checklist." >&2
+        exit 1
+    fi
+
     # Other variables:
     declare -a KDIALOG_ARGS=()              # Arguments for kdialog --checklist.
     declare SELECTED_CSV=""                 # Comma-separated list from kdialog.
@@ -57,6 +71,8 @@ function inqChkBx() {
     for OPTION in "${INPUT_OPTIONS[@]}"; do
         # Trim whitespace.
         OPTION=$(echo "$OPTION" | sed 's/^[ \t]*//;s/[ \t]*$//')
+        # Replace commas in option text to avoid breaking CSV parsing later.
+        OPTION=${OPTION//,/ }  # Replace commas with spaces.
         KDIALOG_ARGS+=("$OPTION" "$OPTION" "off")  # tag, text, initial state (off).
     done
 
