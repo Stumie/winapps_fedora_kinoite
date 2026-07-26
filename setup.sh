@@ -73,7 +73,7 @@ readonly CONFIG_PATH="${HOME}/.config/winapps/winapps.conf" # UNIX path to the W
 readonly INQUIRER_PATH="./install/inquirer.sh" # UNIX path to the 'inquirer' script, which is used to produce selection menus.
 
 # REMOTE DESKTOP CONFIGURATION
-readonly RDP_PORT=3389         # Port used for RDP on Windows.
+RDP_PORT=3389                  # Port used for RDP on Windows.
 readonly DOCKER_IP="127.0.0.1" # Localhost.
 
 ### GLOBAL VARIABLES ###
@@ -87,6 +87,7 @@ OPT_ADD_APPS=0  # Set to '1' if the user specifies '--add-apps'.
 # WINAPPS CONFIGURATION FILE
 RDP_USER=""          # Imported variable.
 RDP_PASS=""          # Imported variable.
+RDP_ASKPASS=""       # Imported variable.
 RDP_DOMAIN=""        # Imported variable.
 RDP_IP=""            # Imported variable.
 VM_NAME="RDPWindows" # Name of the Windows VM (FOR 'libvirt' ONLY).
@@ -560,6 +561,17 @@ function waLoadConfig() {
         # Load the WinApps configuration file.
         # shellcheck source=/dev/null # Exclude this file from being checked by ShellCheck.
         source "$CONFIG_PATH"
+
+        RDP_PORT="${RDP_PORT:-3389}"
+
+        # Send password on the command line if a command to retrieve the password from is not given
+        # Otherwise, set FREERDP_ASKPASS which freerdp will read the stdout of to use as the password
+        RDP_PASSWORD_ARG="/p:$RDP_PASS"
+
+        if [[ ! -z "$RDP_ASKPASS" ]]; then
+            export FREERDP_ASKPASS="$RDP_ASKPASS"
+            unset RDP_PASSWORD_ARG
+        fi
     fi
 
     # Print feedback.
@@ -1090,12 +1102,12 @@ function waCheckRDPAccess() {
         /cert:tofu \
         /d:"$RDP_DOMAIN" \
         /u:"$RDP_USER" \
-        /p:"$RDP_PASS" \
+        ${RDP_PASSWORD_ARG:+"$RDP_PASSWORD_ARG"} \
         /scale:"$RDP_SCALE" \
         +auto-reconnect \
         +home-drive \
         /app:program:"C:\Windows\System32\cmd.exe",cmd:"/C type NUL > $TEST_PATH_WIN && tsdiscon" \
-        /v:"$RDP_IP" &>"$FREERDP_LOG" &
+        /v:"$RDP_IP":"$RDP_PORT" &>"$FREERDP_LOG" &
 
     # Store the FreeRDP process ID.
     FREERDP_PROC=$!
@@ -1223,12 +1235,12 @@ function waFindInstalled() {
         /cert:tofu \
         /d:"$RDP_DOMAIN" \
         /u:"$RDP_USER" \
-        /p:"$RDP_PASS" \
+        ${RDP_PASSWORD_ARG:+"$RDP_PASSWORD_ARG"} \
         /scale:"$RDP_SCALE" \
         +auto-reconnect \
         +home-drive \
-        /app:program:"C:\Windows\System32\cmd.exe",cmd:"/C "$BATCH_SCRIPT_PATH_WIN"" \
-        /v:"$RDP_IP" &>"$FREERDP_LOG" &
+        /app:program:"C:\Windows\System32\cmd.exe",cmd:"/C $BATCH_SCRIPT_PATH_WIN" \
+        /v:"$RDP_IP":"$RDP_PORT" &>"$FREERDP_LOG" &
 
     # Store the FreeRDP process ID.
     FREERDP_PROC=$!
@@ -1292,7 +1304,7 @@ function waConfigureWindows() {
     # Populate variables.
     WIN_BASH="\
 #!/usr/bin/env bash
-${BIN_PATH}/winapps windows"
+${BIN_PATH}/winapps windows \"\$@\""
     WIN_DESKTOP="\
 [Desktop Entry]
 Name=Windows
@@ -1343,7 +1355,7 @@ function waConfigureApp() {
     # Determine the content of the bash script for the application.
     APP_BASH="\
 #!/usr/bin/env bash
-${BIN_PATH}/winapps ${1}"
+${BIN_PATH}/winapps ${1} \"\$@\""
 
     # Determine the content of the '.desktop' file for the application.
     APP_DESKTOP_FILE="\
