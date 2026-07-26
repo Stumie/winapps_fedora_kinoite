@@ -72,3 +72,4 @@ if [[ "$CONTAINER_STATE" != "up" ]]; then
     fi
 fi
 podman ps --all --filter name="$CONTAINER_NAME"
+xdg-open "http://127.0.0.1:8006/"
