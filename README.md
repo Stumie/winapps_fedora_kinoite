@@ -371,12 +371,11 @@ Install the required dependencies.
       ```
 
 > [!NOTE]
-> WinApps requires `FreeRDP` version 3 or later. If not available for your distribution through your package manager, you can install the [Flatpak](https://flathub.org/apps/com.freerdp.FreeRDP):
+> WinApps requires `FreeRDP` version 3 or later, the newer, the better. If it is not available in your distribution's packages, try compiling from source according to [this guide](https://github.com/FreeRDP/FreeRDP/wiki/Compilation) or grab the package from a third party package manager like [Homebrew](https://brew.sh) or [Nix](https://nixos.org).
+> Alternatively, you can try using the [Flatpak](https://flathub.org/apps/com.freerdp.FreeRDP). However, this is not recommended as it can cause sandboxing-related issues. If you use Flatpak, run the following command once to allow the use of `+home-drive`:
 > ```bash
-> flatpak install flathub com.freerdp.FreeRDP
-> sudo flatpak override --filesystem=home com.freerdp.FreeRDP # To use `+home-drive`
+> sudo flatpak override --filesystem=home com.freerdp.FreeRDP
 > ```
-> However, if you have weird issues like [#233](https://github.com/winapps-org/winapps/issues/233) when running Flatpak, please compile FreeRDP from source according to [this guide](https://github.com/FreeRDP/FreeRDP/wiki/Compilation).
 
 ### Step 3: Create a WinApps Configuration File
 Create a configuration file at `~/.config/winapps/winapps.conf` containing the following:
@@ -397,7 +396,17 @@ RDP_USER="MyWindowsUser"
 # [WINDOWS PASSWORD]
 # NOTES:
 # - If using FreeRDP v3.9.0 or greater, you *have* to set a password
+# - RDP_ASKPASS is provided as a more secure option to RDP_PASS:
+#   - Calls an external command and uses its stdout as the password
+#   - The password is not passed on the command line to freerdp, keeping it out of logs
+#   - If specified, takes precedence over RDP_PASS
+#   - Examples to use this:
+#     - RDP_ASKPASS="~/some-custom-command"
+#     - RDP_ASKPASS="bash -c 'cat ~/.some-secret-file'"
+#     - RDP_ASKPASS="bash -c 'kwallet-query --folder winapps --read-password rdp kdewallet'"
+#
 RDP_PASS="MyWindowsPassword"
+RDP_ASKPASS=""
 
 # [WINDOWS DOMAIN]
 # DEFAULT VALUE: '' (BLANK)
@@ -411,6 +420,13 @@ RDP_DOMAIN=""
 # - 'podman': '127.0.0.1'
 # - 'libvirt': '' (BLANK)
 RDP_IP="127.0.0.1"
+
+# [RDP PORT]
+# NOTES:
+# - For Docker and Podman, this is the host port mapped to Windows port 3389.
+# - If you changed the host-side RDP port in compose.yaml, set this to match.
+# DEFAULT VALUE: '3389'
+RDP_PORT="3389"
 
 # [VM NAME]
 # NOTES:
@@ -570,13 +586,13 @@ HIDEF="on"
 1. Test establishing an RDP session by running the following command, replacing the `/u:`, `/p:`, and `/v:` values with the correct values specified in `~/.config/winapps/winapps.conf`.
 
     ```bash
-    xfreerdp3 /u:"MyWindowsUser" /p:"MyWindowsPassword" /v:127.0.0.1 /cert:tofu
+    xfreerdp3 /u:"MyWindowsUser" /p:"MyWindowsPassword" /v:127.0.0.1:3389 /cert:tofu
 
     # Or, if you are using Podman
-    podman unshare --rootless-netns xfreerdp3 /u:"MyWindowsUser" /p:"MyWindowsPassword" /v:127.0.0.1 /cert:tofu
+    podman unshare --rootless-netns xfreerdp3 /u:"MyWindowsUser" /p:"MyWindowsPassword" /v:127.0.0.1:3389 /cert:tofu
 
     # Or, if you installed FreeRDP using Flatpak
-    flatpak run --command=xfreerdp com.freerdp.FreeRDP /u:"MyWindowsUser" /p:"MyWindowsPassword" /v:127.0.0.1 /cert:tofu
+    flatpak run --command=xfreerdp com.freerdp.FreeRDP /u:"MyWindowsUser" /p:"MyWindowsPassword" /v:127.0.0.1:3389 /cert:tofu
     ```
 
     - Please note that the correct `FreeRDP` command may vary depending on your system (e.g. `xfreerdp`, `xfreerdp3`, etc.).
@@ -631,14 +647,40 @@ Once WinApps is installed, a list of additional arguments can be accessed by run
 
 <img src="./docs/readme/installer.gif" width=1000 alt="WinApps Installer Animation.">
 
-## Adding Additional Pre-defined Applications
+## Managing apps post-installation
+### Redetect and add new apps installed in Windows using the WinApps Install Wizard
+The initial setup process will detect any Community Tested Applications and any additionally detected applications and make them available in your Linux application menu. If in the future you install a new application in Windows and want to add it to WinApps, you need to run the `winapps-setup` again to detect the new application(s).
+
+The setup command has a number of options that can be passed to it:
+```
+winapps-setup --help
+Usage:
+      --user                                        # Install WinApps and selected applications in /home/$(whoami)
+      --system                                      # Install WinApps and selected applications in /usr
+      --user --setupAllOfficiallySupportedApps      # Install WinApps and all officially supported applications in /home/$(whoami)
+      --system --setupAllOfficiallySupportedApps    # Install WinApps and all officially supported applications in /usr
+      --user --uninstall                            # Uninstall everything in /home/$(whoami)
+      --system --uninstall                          # Uninstall everything in /usr
+      --user --add-apps                             # Add new applications to existing installation in /home/$(whoami)
+      --system --add-apps                           # Add new applications to existing installation in /usr
+      --help                                        # Display this usage message.
+```
+
+To re-run the app detection, run the setup like
+```
+winapps-setup --user --add-apps
+```
+
+This will bring up the familiar setup wizard screen and you step through the wizard as above choosing the apps you wish to make available.  Note that if your Windows VM is not yet running, the setup will exit and tell you to start the VM first.
+
+### Adding Additional Pre-defined Applications
 Adding your own applications with custom icons and MIME types to the installer is easy. Simply copy one of the application configurations in the `apps` folder located within the WinApps repository, and:
 1. Modify the name and variables to reflect the appropriate/desired values for your application.
 2. Replace `icon.svg` with an SVG for your application (ensuring the icon is appropriately licensed).
 3. Remove and reinstall WinApps.
 4. Submit a pull request to add your application to WinApps as a community tested application once you have tested and verified your configuration (optional, but encouraged).
 
-## Running Applications Manually
+### Running Applications Manually
 WinApps offers a manual mode for running applications that were not configured by the WinApps installer. This is completed with the `manual` flag. Executables that are in the Windows PATH do not require full path definition.
 
 ```bash
@@ -721,6 +763,13 @@ nix profile install github:Stumie/winapps_fedora_kinoite#winapps-launcher # opti
                 winapps.packages."${system}".winapps
                 winapps.packages."${system}".winapps-launcher # optional
               ];
+
+              # set up binary cache (optional)
+              nix.settings = {
+                substituters = [ "https://winapps.cachix.org/" ];
+                trusted-public-keys = [ "winapps.cachix.org-1:HI82jWrXZsQRar/PChgIx1unmuEsiQMQq+zt05CD36g=" ];
+                trusted-users = [ "<your username>" ]; # replace with your username
+              };
             }
           )
         ];
