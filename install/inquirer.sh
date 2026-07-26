@@ -13,7 +13,6 @@ declare -r ANSI_CLEAR_TEXT="\033[0m"    # Default text.
 ### FUNCTIONS ###
 function inqMenu() {
     # DECLARE VARIABLES.
-    # Variables created from function arguments:
     declare DIALOG_TEXT="$1"                # Dialog heading.
     declare INPUT_OPTIONS_VAR="$2"          # Input variable name (array).
     declare RETURN_STRING_VAR="$3"          # Output variable name (string).
@@ -21,18 +20,18 @@ function inqMenu() {
     declare -n RETURN_STRING="$RETURN_STRING_VAR" # Output string nameref.
 
     # Other variables:
-    declare KDIALOG_ARGS=()                 # Arguments for kdialog --menu.
+    declare -a KDIALOG_ARGS=()              # Arguments for kdialog --menu.
 
     # MAIN LOGIC.
     # Build kdialog arguments: "tag" "text" pairs.
     for OPTION in "${INPUT_OPTIONS[@]}"; do
         # Trim whitespace.
         OPTION=$(echo "$OPTION" | sed 's/^[ \t]*//;s/[ \t]*$//')
-        KDIALOG_ARGS+=("$OPTION" "$OPTION") # tag and text are the same.
+        KDIALOG_ARGS+=("$OPTION" "$OPTION")  # tag and text are the same.
     done
 
     # Show menu and capture selection.
-    RETURN_STRING=$(kdialog --menu "$DIALOG_TEXT" "${KDIALOG_ARGS[@]}") || exit 0
+    RETURN_STRING=$(kdialog --menu "$DIALOG_TEXT" "${KDIALOG_ARGS[@]@Q}") || exit 0
 
     # Trim whitespace from result.
     RETURN_STRING=$(echo "$RETURN_STRING" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
@@ -43,7 +42,6 @@ function inqMenu() {
 
 function inqChkBx() {
     # DECLARE VARIABLES.
-    # Variables created from function arguments:
     declare DIALOG_TEXT="$1"                # Dialog heading.
     declare INPUT_OPTIONS_VAR="$2"          # Input variable name (array).
     declare RETURN_ARRAY_VAR="$3"           # Output variable name (array).
@@ -51,7 +49,7 @@ function inqChkBx() {
     declare -n RETURN_ARRAY="$RETURN_ARRAY_VAR"   # Output array nameref.
 
     # Other variables:
-    declare KDIALOG_ARGS=()                 # Arguments for kdialog --checklist.
+    declare -a KDIALOG_ARGS=()              # Arguments for kdialog --checklist.
     declare SELECTED_CSV=""                 # Comma-separated list from kdialog.
 
     # MAIN LOGIC.
@@ -59,13 +57,13 @@ function inqChkBx() {
     for OPTION in "${INPUT_OPTIONS[@]}"; do
         # Trim whitespace.
         OPTION=$(echo "$OPTION" | sed 's/^[ \t]*//;s/[ \t]*$//')
-        KDIALOG_ARGS+=("$OPTION" "$OPTION" "off") # tag, text, initial state (off).
+        KDIALOG_ARGS+=("$OPTION" "$OPTION" "off")  # tag, text, initial state (off).
     done
 
     # Show checklist and capture selections (comma-separated).
-    SELECTED_CSV=$(kdialog --checklist "$DIALOG_TEXT" "${KDIALOG_ARGS[@]}") || exit 0
+    SELECTED_CSV=$(kdialog --checklist "$DIALOG_TEXT" "${KDIALOG_ARGS[@]@Q}") || exit 0
 
-    # Split CSV into array.
+    # Split comma-separated output into array.
     IFS=',' read -ra RETURN_ARRAY <<< "$SELECTED_CSV"
 
     # Trim whitespace from each selected option.
