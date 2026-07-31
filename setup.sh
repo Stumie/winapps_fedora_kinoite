@@ -1881,10 +1881,11 @@ function waAddApps() {
         RDP_IP="$DOCKER_IP"
     fi
 
-    # If using podman backend, modify the FreeRDP command to enter a new namespace.
-    if [ "$WAFLAVOR" = "podman" ]; then
-        FREERDP_COMMAND="podman unshare --rootless-netns ${FREERDP_COMMAND}"
-    fi
+    # Outcommented to make it pasta compatible
+    # # If using podman backend, modify the FreeRDP command to enter a new namespace.
+    # if [ "$WAFLAVOR" = "podman" ]; then
+    #     FREERDP_COMMAND="podman unshare --rootless-netns ${FREERDP_COMMAND}"
+    # fi
 
     if [ "$WAFLAVOR" = "docker" ] || [ "$WAFLAVOR" = "podman" ]; then
         # Check if Windows is powered on.
