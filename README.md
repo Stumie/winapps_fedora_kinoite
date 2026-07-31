@@ -436,13 +436,13 @@ RDP_PORT="3389"
 VM_NAME="RDPWindows"
 
 # [WINAPPS BACKEND]
-# DEFAULT VALUE: 'docker'
+# DEFAULT VALUE: 'podman'
 # VALID VALUES:
 # - 'docker'
 # - 'podman'
 # - 'libvirt'
 # - 'manual'
-WAFLAVOR="docker"
+WAFLAVOR="podman"
 
 # [DISPLAY SCALING FACTOR]
 # NOTES:

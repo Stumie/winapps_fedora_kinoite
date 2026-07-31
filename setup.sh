@@ -91,7 +91,7 @@ RDP_ASKPASS=""       # Imported variable.
 RDP_DOMAIN=""        # Imported variable.
 RDP_IP=""            # Imported variable.
 VM_NAME="RDPWindows" # Name of the Windows VM (FOR 'libvirt' ONLY).
-WAFLAVOR="docker"    # Imported variable.
+WAFLAVOR="podman"    # Imported variable.
 RDP_SCALE=100        # Imported variable.
 RDP_FLAGS=""         # Imported variable.
 DEBUG="true"         # Imported variable.
@@ -989,6 +989,15 @@ function waCheckContainerRunning() {
 
     # Check container state.
     if [[ "$CONTAINER_STATE" != "up" ]]; then
+        
+        local ROOTLESSPODMANHELPERSCRIPT="start-windows-in-rootless-podman-without-podman-compose.sh"
+
+        if [ -d "$SYS_SOURCE_PATH" ]; then
+            ROOTLESSPODMANHELPERSCRIPT=$SYS_SOURCE_PATH/$ROOTLESSPODMANHELPERSCRIPT
+        elif [ -d "$USER_SOURCE_PATH" ]; then
+            ROOTLESSPODMANHELPERSCRIPT=$USER_SOURCE_PATH/$ROOTLESSPODMANHELPERSCRIPT
+        fi
+
         # Complete the previous line.
         echo -e "${FAIL_TEXT}Failed!${CLEAR_TEXT}\n"
 
@@ -1002,6 +1011,8 @@ function waCheckContainerRunning() {
         echo "--------------------------------------------------------------------------------"
         echo "Please ensure Windows is powered on:"
         echo -e "${COMMAND_TEXT}${COMPOSE_COMMAND} --file ~/.config/winapps/compose.yaml start${CLEAR_TEXT}"
+        echo "or on Fedora Kinoite:"
+        echo -e "${COMMAND_TEXT}${ROOTLESSPODMANHELPERSCRIPT}${CLEAR_TEXT}"
         echo "--------------------------------------------------------------------------------"
 
         # Terminate the script.
