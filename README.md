@@ -353,7 +353,7 @@ Install the required dependencies.
       ```bash
       echo "You're fine, everything is here. :)"
       ```
-  - Other, but only non-atomic Fedora/RHEL:
+  - Other Fedora/RHEL:
       ```bash
       sudo dnf install -y curl kdialog freerdp git iproute libnotify
       ```
@@ -645,8 +645,6 @@ bash <(curl https://raw.githubusercontent.com/Stumie/winapps_fedora_kinoite/main
 
 Once WinApps is installed, a list of additional arguments can be accessed by running `winapps-setup --help`.
 
-<img src="./docs/readme/installer.gif" width=1000 alt="WinApps Installer Animation.">
-
 ## Managing apps post-installation
 ### Redetect and add new apps installed in Windows using the WinApps Install Wizard
 The initial setup process will detect any Community Tested Applications and any additionally detected applications and make them available in your Linux application menu. If in the future you install a new application in Windows and want to add it to WinApps, you need to run the `winapps-setup` again to detect the new application(s).
@@ -698,124 +696,3 @@ The installer can be run multiple times. To update your installation of WinApps:
 The [WinApps Launcher](https://github.com/winapps-org/winapps-launcher) provides a simple system tray menu that makes it easy to launch your installed Windows applications, open a full desktop RDP session, and control your Windows VM or container. You can start, stop, pause, reboot or hibernate Windows, as well as access your installed applications from a convenient list. This lightweight, optional tool helps streamline your overall WinApps experience.
 
 <img src="./docs/readme/launcher.gif" width=1000 alt="WinApps Launcher Animation.">
-
-## Installation using Nix
-
-First, follow Step 1 of the normal installation guide to create your VM.
-Then, install WinApps according to the following instructions.
-
-After installation, it will be available under `winapps`, with the installer being available under `winapps-setup`
-and the optional launcher being available under `winapps-launcher.`
-
-### Using standalone Nix
-
-First, make sure Flakes and the `nix` command are enabled.
-In your `~/.config/nix/nix.conf`:
-```
-experimental-features = nix-command flakes
-```
-
-```bash
-nix profile install github:Stumie/winapps_fedora_kinoite#winapps
-nix profile install github:Stumie/winapps_fedora_kinoite#winapps-launcher # optional
-```
-
-### On NixOS using Flakes
-
-```nix
-# flake.nix
-{
-  description = "My configuration";
-
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-
-    winapps = {
-      url = "github:Stumie/winapps_fedora_kinoite";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-  };
-
-  outputs =
-    inputs@{
-      nixpkgs,
-      winapps,
-      ...
-    }:
-    {
-      nixosConfigurations.hostname = nixpkgs.lib.nixosSystem rec {
-        system = "x86_64-linux";
-
-        specialArgs = {
-          inherit inputs system;
-        };
-
-        modules = [
-          ./configuration.nix
-          (
-            {
-              pkgs,
-              system ? pkgs.system,
-              ...
-            }:
-            {
-              environment.systemPackages = [
-                winapps.packages."${system}".winapps
-                winapps.packages."${system}".winapps-launcher # optional
-              ];
-
-              # set up binary cache (optional)
-              nix.settings = {
-                substituters = [ "https://winapps.cachix.org/" ];
-                trusted-public-keys = [ "winapps.cachix.org-1:HI82jWrXZsQRar/PChgIx1unmuEsiQMQq+zt05CD36g=" ];
-                trusted-users = [ "<your username>" ]; # replace with your username
-              };
-            }
-          )
-        ];
-      };
-    };
-}
-```
-
-### On NixOS without Flakes
-
-[Flakes aren't real and they can't hurt you.](https://jade.fyi/blog/flakes-arent-real/).
-However, if you still don't want to use flakes, you can use WinApps with flake-compat like:
-
-```nix
-# configuration.nix
-{
-  pkgs,
-  system ? pkgs.system,
-  ...
-}:
-{
-  # set up binary cache (optional)
-  nix.settings = {
-    substituters = [ "https://winapps.cachix.org/" ];
-    trusted-public-keys = [ "winapps.cachix.org-1:HI82jWrXZsQRar/PChgIx1unmuEsiQMQq+zt05CD36g=" ];
-    trusted-users = [ "<your username>" ]; # replace with your username
-  };
-
-  environment.systemPackages =
-    let
-      winapps =
-        (import (builtins.fetchTarball "https://github.com/Stumie/winapps_fedora_kinoite/archive/main.tar.gz"))
-        .packages."${system}";
-    in
-    [
-      winapps.winapps
-      winapps.winapps-launcher # optional
-    ];
-}
-```
-
-## Star History
-<a href="https://star-history.com/#Stumie/winapps_fedora_kinoite&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Stumie/winapps_fedora_kinoite&type=Date&theme=dark"/>
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Stumie/winapps_fedora_kinoite&type=Date"/>
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Stumie/winapps_fedora_kinoite&type=Date"/>
- </picture>
-</a>
