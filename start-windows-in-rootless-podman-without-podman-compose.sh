@@ -31,26 +31,41 @@ readonly YQ_PATH="${HOME}/.local/bin/yq"
 ### GLOBAL VARIABLES ###
 COMPOSE_PATH=""
 DEBUG=${DEBUG:-false}
+CONTAINER_NAME=""
+IMAGE=""
+VERSION=""
+DISK_SIZE=""
+RAM_SIZE=""
+CPU_CORES=""
+USERNAME=""
+PASSWORD=""
+WIN_HOME=""
+RESTART_POLICY=""
+VOLUMES=()
 
 ### FUNCTIONS ###
 # Error handling
 error_exit() {
     local exit_code=$1
     local message=$2
-    echo -e "${RED}[ERROR]${NC} $message" >&2
+    printf "%b[ERROR]%b %s\n" "${RED}" "${NC}" "$message" >&2
     log "[ERROR] $message"
     exit "$exit_code"
 }
 
 warn() {
     local message=$1
-    echo -e "${YELLOW}[WARNING]${NC} $message" >&2
-    log "[WARNING] $message"
+    printf "%b[WARNING]%b %s\n" "${YELLOW}" "${NC}" "$message" >&2
+    if [[ "$DEBUG" = "true" ]]; then
+        mkdir -p "${HOME}/.local/share/winapps" 2>/dev/null && \
+        printf "[WARNING] %s\n" "$message" >> "${HOME}/.local/share/winapps/start-podman.log" || \
+        printf "%b[WARNING]%b Failed to create log directory.\n" "${YELLOW}" "${NC}" >&2
+    fi
 }
 
 info() {
     local message=$1
-    echo -e "${GREEN}[INFO]${NC} $message"
+    printf "%b[INFO]%b %s\n" "${GREEN}" "${NC}" "$message"
     log "[INFO] $message"
 }
 
@@ -75,11 +90,14 @@ EOF
 
 # Logging (only if DEBUG=true)
 log() {
-    if [ "$DEBUG" = "true" ]; then
-        mkdir -p "${HOME}/.local/share/winapps" 2>/dev/null || warn "Failed to create log directory."
-        local timestamp
-        timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-        echo "[$timestamp] $1" >> "${HOME}/.local/share/winapps/start-podman.log"
+    if [[ "$DEBUG" = "true" ]]; then
+        if mkdir -p "${HOME}/.local/share/winapps" 2>/dev/null; then
+            local timestamp
+            timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+            printf "[%s] %s\n" "$timestamp" "$1" >> "${HOME}/.local/share/winapps/start-podman.log"
+        else
+            printf "%b[WARNING]%b Failed to create log directory.\n" "${YELLOW}" "${NC}" >&2
+        fi
     fi
 }
 
@@ -107,7 +125,7 @@ check_podman_version() {
     podman_version=$(podman --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
     local required_version="4.0.0"
 
-    if [ -z "$podman_version" ]; then
+    if [[ -z "$podman_version" ]]; then
         error_exit "$EC_MISSING_DEPS" "Podman version could not be determined. Required: >= $required_version"
     fi
 
@@ -146,12 +164,13 @@ get_yq_checksum() {
     # Direct download of checksum file (no REST API, no rate limiting)
     local checksum_url="https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64.sha256"
     local checksum
+    checksum=$(curl -sfL "$checksum_url" 2>/dev/null | awk '{print $1}') || true
 
-    if checksum=$(curl -s -L "$checksum_url" 2>/dev/null | awk '{print $1}'); then
+    if [[ -n "$checksum" && "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then
         echo "$checksum"
         return 0
     else
-        error_exit "$EC_YQ_DOWNLOAD_FAILED" "Failed to fetch yq checksum from GitHub."
+        error_exit "$EC_YQ_DOWNLOAD_FAILED" "Failed to fetch valid yq SHA256 checksum from GitHub."
     fi
 }
 
@@ -170,7 +189,7 @@ verify_yq_checksum() {
 
 install_yq() {
     # Check if yq is already installed and executable
-    if [ -x "$YQ_PATH" ]; then
+    if [[ -x "$YQ_PATH" ]]; then
         info "yq is already installed and executable."
         return 0
     fi
@@ -188,7 +207,11 @@ install_yq() {
     # Download yq (latest version)
     info "Downloading latest yq..."
     local yq_url="https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64"
-    if ! curl -s -L "$yq_url" -o "$YQ_PATH"; then
+    local tmp_yq
+    tmp_yq=$(mktemp)
+    trap 'rm -f "$tmp_yq"' EXIT
+    
+    if ! curl -sfL "$yq_url" -o "$tmp_yq"; then
         error_exit "$EC_YQ_DOWNLOAD_FAILED" "Failed to download yq. Check your internet connection."
     fi
 
@@ -197,9 +220,11 @@ install_yq() {
     expected_checksum=$(get_yq_checksum)
 
     # Verify checksum (if available)
-    verify_yq_checksum "$YQ_PATH" "$expected_checksum"
+    verify_yq_checksum "$tmp_yq" "$expected_checksum"
 
-    chmod +x "$YQ_PATH" || error_exit "$EC_YQ_DOWNLOAD_FAILED" "Failed to make yq executable."
+    chmod +x "$tmp_yq" || error_exit "$EC_YQ_DOWNLOAD_FAILED" "Failed to make yq executable."
+    mv "$tmp_yq" "$YQ_PATH"
+    trap - EXIT
 
     # Verify yq works
     if ! "$YQ_PATH" --version &>/dev/null; then
@@ -259,7 +284,7 @@ parse_compose_config() {
 
     # Read all values as separate lines (one per line)
     local yq_out
-    yq_out=$("$YQ_PATH" eval '
+    yq_out=$("$YQ_PATH" eval -r '
         .services.windows.container_name // "",
         .services.windows.image // "",
         .services.windows.environment.VERSION // "",
@@ -287,9 +312,19 @@ parse_compose_config() {
     PASSWORD="${values[7]}"
     WIN_HOME="${values[8]}"
     RESTART_POLICY="${values[9]}"
+    
+    # Parse volumes from compose.yaml (if available)
+    local volumes_raw
+    volumes_raw=$("$YQ_PATH" eval -r '.services.windows.volumes // [] | join("\n")' "$compose_path")
+    if [[ -n "$volumes_raw" ]] && [[ "$volumes_raw" != "null" ]]; then
+        IFS=$'\n' read -ra VOLUMES <<< "$volumes_raw"
+    else
+        # Fallback: Use default volumes if none specified in compose.yaml
+        VOLUMES=("data:/storage" "$(dirname "$compose_path")/oem:/oem")
+    fi
 
     # Validate required fields
-    if [ -z "${CONTAINER_NAME:-}" ] || [ -z "${IMAGE:-}" ] || [ -z "${VERSION:-}" ]; then
+    if [[ -z "${CONTAINER_NAME:-}" ]] || [[ -z "${IMAGE:-}" ]] || [[ -z "${VERSION:-}" ]]; then
         error_exit "$EC_COMPOSE_INVALID" "Missing essential fields in compose.yaml"
     fi
 }
@@ -333,6 +368,76 @@ start_container() {
     # Log the detected settings
     info "Detected keyboard layout: $winkeyboard, region: $winregion, Windows language: $windows_language"
 
+    # Create volumes from compose.yaml and prepare volume arguments
+    local volume_args=()
+    for volume in "${VOLUMES[@]}"; do
+        # Safe variable expansion per volume entry (HOME, PWD, ~)
+        volume="${volume//\$\{HOME\}/$HOME}"
+        volume="${volume//\$HOME/$HOME}"
+        volume="${volume/#\~\//$HOME/}"
+        volume="${volume/#\~:/$HOME:}"
+        volume="${volume//\$\{PWD\}/$PWD}"
+        volume="${volume//\$PWD/$PWD}"
+        
+        # Extract host path (part before the first ':')
+        local host_path="${volume%%:*}"
+        
+        # Check if volume already has :z, :Z, ,z, or ,Z suffix
+        local volume_with_suffix="$volume"
+        IFS=':' read -ra parts <<< "$volume"
+        case "${#parts[@]}" in
+            2)
+                volume_with_suffix="${volume}:z"
+                ;;
+            3)
+                # Check if options (3rd part) already contain 'z' or 'Z'
+                if [[ ",${parts[2]}," =~ ,([zZ]), ]]; then
+                    volume_with_suffix="$volume"
+                else
+                    volume_with_suffix="${volume},z"
+                fi
+                ;;
+            *)
+                volume_with_suffix="$volume"
+                ;;
+        esac
+        
+        # Check if this is a bind mount (host path starts with / or .)
+        if [[ "$host_path" == /* || "$host_path" == .* ]]; then
+            info "Using bind mount: $volume_with_suffix"
+            
+            # Resolve host path to absolute path for SELinux check
+            local abs_host_path
+            abs_host_path=$(realpath -m "$host_path" 2>/dev/null || readlink -f "$host_path" 2>/dev/null || echo "$host_path")
+            
+            # Check SELinux context
+            if [[ "$abs_host_path" == "/home"* || "$abs_host_path" == "/var/home"* ]] && command -v selinuxenabled &>/dev/null && selinuxenabled; then
+                if [[ -e "$abs_host_path" ]]; then
+                    local current_context
+                    current_context=$(stat -c '%C' "$abs_host_path" 2>/dev/null || true)
+                    if [[ "$current_context" != *"container_file_t"* ]]; then
+                        warn "SELinux blocks relabeling of '$abs_host_path' (current context: $current_context).
+To fix, run one of the following:
+  1. Temporary fix: sudo chcon -Rt container_file_t '$abs_host_path'
+  2. Permanent fix: sudo semanage fcontext -a -t container_file_t '$abs_host_path(/.*)?' && sudo restorecon -Rv '$abs_host_path'
+  3. Alternative: Move the bind mount to a path like /run/user/$(id -u)/shared"
+                    fi
+                fi
+            fi
+            volume_args+=("-v" "$volume_with_suffix")
+        else
+            # Named volume logic
+            local volume_name="${volume%%:*}"
+            if ! podman volume exists "$volume_name" &>/dev/null; then
+                info "Creating volume: $volume_name"
+                podman volume create --ignore "$volume_name" || warn "Failed to create volume: $volume_name"
+            else
+                info "Volume $volume_name already exists"
+            fi
+            volume_args+=("-v" "$volume_with_suffix")
+        fi
+    done
+
     local container_state
     container_state=$(podman ps --all --filter name="^${CONTAINER_NAME}$" --format '{{.Status}}' 2>/dev/null || true)
     container_state=${container_state,,}
@@ -343,10 +448,8 @@ start_container() {
         # Clean up any existing container with the same name
         if [ "$DEBUG" = "true" ]; then
             podman rm -f "$CONTAINER_NAME" || true
-            podman volume create --ignore data || true
         else
             podman rm -f "$CONTAINER_NAME" > /dev/null 2>&1 || true
-            podman volume create --ignore data > /dev/null 2>&1 || true
         fi
 
         # Check ports only if container is not running
@@ -356,27 +459,49 @@ start_container() {
         local podman_cmd=(
             podman run
             -d
-            --rm
             --name "$CONTAINER_NAME"
             --device=/dev/kvm
             --device=/dev/net/tun
             --network "pasta:-t,127.0.0.1/8006:8006,-t,127.0.0.1/3389:3389,-u,127.0.0.1/3389:3389"
-            -v "data:/storage:z"
-            -v "$(dirname "$compose_path")/oem:/oem:z"
+            "${volume_args[@]}"  # Dynamische Volumes mit :z-Suffix
             --stop-timeout 120
             --uidmap "+0:@$(id -u)"
-            --restart "$RESTART_POLICY"
-            -e VERSION="$VERSION"
-            -e DISK_SIZE="$DISK_SIZE"
-            -e RAM_SIZE="$RAM_SIZE"
-            -e CPU_CORES="$CPU_CORES"
-            -e USERNAME="$USERNAME"
-            -e PASSWORD="$PASSWORD"
-            -e HOME="$WIN_HOME"
-            -e REGION="$winregion"
-            -e KEYBOARD="$winkeyboard"
-            -e LANGUAGE="$windows_language"
-            -e NETWORK="user"
+        )
+        
+        # Add --rm or --restart (they are mutually exclusive in Podman)
+        if [[ -n "$RESTART_POLICY" && "$RESTART_POLICY" != "no" ]]; then
+            podman_cmd+=(--restart "$RESTART_POLICY")
+        else
+            podman_cmd+=(--rm)
+        fi
+        
+        # Add environment variables only if they are non-empty
+        if [[ -n "$VERSION" ]]; then
+            podman_cmd+=(-e "VERSION=$VERSION")
+        fi
+        if [[ -n "$DISK_SIZE" ]]; then
+            podman_cmd+=(-e "DISK_SIZE=$DISK_SIZE")
+        fi
+        if [[ -n "$RAM_SIZE" ]]; then
+            podman_cmd+=(-e "RAM_SIZE=$RAM_SIZE")
+        fi
+        if [[ -n "$CPU_CORES" ]]; then
+            podman_cmd+=(-e "CPU_CORES=$CPU_CORES")
+        fi
+        if [[ -n "$USERNAME" ]]; then
+            podman_cmd+=(-e "USERNAME=$USERNAME")
+        fi
+        if [[ -n "$PASSWORD" ]]; then
+            podman_cmd+=(-e "PASSWORD=$PASSWORD")
+        fi
+        if [[ -n "$WIN_HOME" ]]; then
+            podman_cmd+=(-e "HOME=$WIN_HOME")
+        fi
+        podman_cmd+=(
+            -e "REGION=$winregion"
+            -e "KEYBOARD=$winkeyboard"
+            -e "LANGUAGE=$windows_language"
+            -e "NETWORK=user"
             "$IMAGE"
         )
 
@@ -422,7 +547,7 @@ check_vnc_availability() {
 
     info "Checking if VNC is available at $host:$port..."
     while (( elapsed < timeout )); do
-        if timeout 1 bash -c "echo > /dev/tcp/$host/$port" &>/dev/null; then
+        if timeout 1 bash -c 'exec 3<>/dev/tcp/"$1"/"$2"' _ "$host" "$port" &>/dev/null; then
             info "VNC is available at $host:$port (took ${elapsed}s)."
             return 0
         fi
@@ -478,14 +603,14 @@ check_podman_version
 install_yq
 
 # Set compose path
-if [ -z "$COMPOSE_PATH" ]; then
+if [[ -z "$COMPOSE_PATH" ]]; then
     for path in "${DEFAULT_COMPOSE_PATHS[@]}"; do
-        if [ -f "$path" ]; then
+        if [[ -f "$path" ]]; then
             COMPOSE_PATH="$path"
             break
         fi
     done
-    if [ -z "$COMPOSE_PATH" ]; then
+    if [[ -z "$COMPOSE_PATH" ]]; then
         error_exit "$EC_COMPOSE_INVALID" "compose.yaml not found in standard locations."
     fi
 fi
