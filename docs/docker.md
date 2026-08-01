@@ -35,6 +35,9 @@ Please refer to the [original GitHub repository](https://github.com/dockur/windo
 > docker compose down --rmi=all --volumes
 > ```
 
+> [!IMPORTANT]
+> Ensure `WAFLAVOR` is set to `"docker"` in `~/.config/winapps/winapps.conf`.
+
 ### Installing Windows
 You can initiate the Windows installation using `docker compose`.
 ```bash
@@ -76,6 +79,9 @@ docker compose --file ~/.config/winapps/compose.yaml kill # Force shut down the 
 1. Install `Podman` using [this guide](https://podman.io/docs/installation).
 2. Install `podman-compose` using [this guide](https://github.com/containers/podman-compose?tab=readme-ov-file#installation).
 
+> [!IMPORTANT]
+> This is not (!) necessary on Fedora Kinoite!
+
 ### Setup `Podman` Container
 Please follow the [`docker` instructions](#setup-docker-container).
 
@@ -84,6 +90,9 @@ Please follow the [`docker` instructions](#setup-docker-container).
 > If you are invoking podman as a user, your container will be "rootless". This can be desirable as a security feature. However, you may encounter an error about missing permissions to /dev/kvm as a consequence.
 >
 > For rootless podman to work, you need to add your user to the `kvm` group (depending on your distribution) to be able to access `/dev/kvm`. Make sure that you are using `crun` as your container runtime, not `runc`. Usually this is done by stopping all containers and (de-)installing the corresponding packages. Then either invoke podman-compose as `podman-compose --file ./compose.yaml --podman-create-args '--group-add keep-groups' up`. Or edit `compose.yaml` and uncomment the `group_add:` section at the end, and add `[]`.
+
+> [!IMPORTANT]
+> If you use the script `start-windows-in-rootless-podman-without-podman-compose.sh` everything is done for you and there's no need to manipulate the `compose.yaml` specifically for rootless Podman.
 
 > [!IMPORTANT]
 > Ensure `WAFLAVOR` is set to `"podman"` in `~/.config/winapps/winapps.conf`.
@@ -95,10 +104,9 @@ cd winapps
 podman-compose --file ./compose.yaml up
 ```
 
-Alternatively you can use the script `start-windows-in-rootless-podman-without-podman-compose.sh`.
-It can start, like its name suggests, a rootless podman container with Windows running without podman-compose.
+On Fedora Kinoite only use the script `start-windows-in-rootless-podman-without-podman-compose.sh`.
+It starts, like its name suggests, a rootless podman container with Windows running without podman-compose.
 ```bash
-cd winapps
 ./start-windows-in-rootless-podman-without-podman-compose.sh
 ```
 
@@ -120,6 +128,13 @@ rm ~/.config/freerdp/server/127.0.0.1_3389.pem
 podman-compose --file ~/.config/winapps/compose.yaml up
 ```
 
+On Fedora Kinoite only use the script `start-windows-in-rootless-podman-without-podman-compose.sh`.
+It starts, like its name suggests, a rootless podman container with Windows running without podman-compose.
+Restart the script after you changed the `compose.yaml`.
+```bash
+./start-windows-in-rootless-podman-without-podman-compose.sh
+```
+
 ### Subsequent Use
 ```bash
 podman-compose --file ~/.config/winapps/compose.yaml start # Power on the Windows VM
@@ -128,4 +143,11 @@ podman-compose --file ~/.config/winapps/compose.yaml unpause # Resume the Window
 podman-compose --file ~/.config/winapps/compose.yaml restart # Restart the Windows VM
 podman-compose --file ~/.config/winapps/compose.yaml stop # Gracefully shut down the Windows VM
 podman-compose --file ~/.config/winapps/compose.yaml kill # Force shut down the Windows VM
+```
+
+On Fedora Kinoite only use the script `start-windows-in-rootless-podman-without-podman-compose.sh`.
+It starts, like its name suggests, a rootless podman container with Windows running without podman-compose.
+Restart the script after you changed the `compose.yaml`.
+```bash
+./start-windows-in-rootless-podman-without-podman-compose.sh
 ```
