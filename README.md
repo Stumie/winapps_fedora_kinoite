@@ -569,7 +569,7 @@ HIDEF="on"
 > `RDP_USER` and `RDP_PASS` must correspond to a complete Windows user account and password, such as those created during Windows setup or for a domain user. User/PIN combinations are not valid for RDP access.
 
 > [!IMPORTANT]
-> If you wish to use an alternative WinApps backend (other than `Docker`), uncomment and change `WAFLAVOR="docker"` to `WAFLAVOR="podman"` or `WAFLAVOR="libvirt"`.
+> If you wish to use an alternative WinApps backend (other than `Podman`), uncomment and change `WAFLAVOR="podman"` to `WAFLAVOR="docker"` or `WAFLAVOR="libvirt"`.
 
 #### Configuration Options Explained
 - If using a pre-existing Windows RDP server on your LAN, you must use `RDP_IP` to specify the location of the Windows server. You may also wish to configure a static IP address for this server.
