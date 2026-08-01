@@ -41,6 +41,7 @@ USERNAME=""
 PASSWORD=""
 WIN_HOME=""
 RESTART_POLICY=""
+STOP_TIMEOUT=""
 VOLUMES=()
 
 ### FUNCTIONS ###
@@ -135,9 +136,9 @@ check_podman_version() {
 
     # Compare each part numerically
     for i in {0..2}; do
-        if (( ${podman_parts[$i]:-0} < ${required_parts[$i]:-0} )); then
+        if (( 10#${podman_parts[$i]:-0} < 10#${required_parts[$i]:-0} )); then
             error_exit "$EC_MISSING_DEPS" "Podman version $podman_version is too old. Required: >= $required_version"
-        elif (( ${podman_parts[$i]:-0} > ${required_parts[$i]:-0} )); then
+        elif (( 10#${podman_parts[$i]:-0} > 10#${required_parts[$i]:-0} )); then
             return 0  # Podman version is newer
         fi
     done
@@ -294,7 +295,8 @@ parse_compose_config() {
         .services.windows.environment.USERNAME // "",
         .services.windows.environment.PASSWORD // "",
         .services.windows.environment.HOME // "",
-        .services.windows.restart // ""
+        .services.windows.restart // "",
+        .services.windows.stop_grace_period // ""
     ' "$compose_path")
 
     # Read into array (one value per line)
@@ -312,6 +314,26 @@ parse_compose_config() {
     PASSWORD="${values[7]}"
     WIN_HOME="${values[8]}"
     RESTART_POLICY="${values[9]}"
+    
+    # Parse and sanitize STOP_TIMEOUT
+    local raw_stop_timeout="${values[10]:-}"
+    
+    # Trim leading and trailing whitespace using pure Bash (no xargs/subshell)
+    raw_stop_timeout="${raw_stop_timeout#"${raw_stop_timeout%%[![:space:]]*}"}"
+    raw_stop_timeout="${raw_stop_timeout%"${raw_stop_timeout##*[![:space:]]}"}"
+
+    if [[ -z "$raw_stop_timeout" ]]; then
+        STOP_TIMEOUT=""
+    elif [[ "$raw_stop_timeout" =~ ^([0-9]+)[sS]?$ ]]; then
+        # Pure seconds or seconds with s/S suffix (e.g., 120, 120s, 120S)
+        STOP_TIMEOUT=$(( 10#${BASH_REMATCH[1]} ))
+    elif [[ "$raw_stop_timeout" =~ ^([0-9]+)[mM]$ ]]; then
+        # Convert minutes to seconds (e.g., 2m or 2M -> 120)
+        STOP_TIMEOUT=$(( 10#${BASH_REMATCH[1]} * 60 ))
+    else
+        STOP_TIMEOUT=""
+        warn "Invalid or unsupported stop_grace_period format '$raw_stop_timeout'. Supported formats: 120, 120s, 2m. Skipping --stop-timeout."
+    fi
     
     # Parse volumes from compose.yaml (if available)
     local volumes_raw
@@ -464,9 +486,13 @@ To fix, run one of the following:
             --device=/dev/net/tun
             --network "pasta:-t,127.0.0.1/8006:8006,-t,127.0.0.1/3389:3389,-u,127.0.0.1/3389:3389"
             "${volume_args[@]}"  # Dynamische Volumes mit :z-Suffix
-            --stop-timeout 120
             --uidmap "+0:@$(id -u)"
         )
+        
+        # Add stop timeout if specified in compose.yaml
+        if [[ -n "$STOP_TIMEOUT" ]]; then
+            podman_cmd+=(--stop-timeout "$STOP_TIMEOUT")
+        fi
         
         # Add --rm or --restart (they are mutually exclusive in Podman)
         if [[ -n "$RESTART_POLICY" && "$RESTART_POLICY" != "no" ]]; then
@@ -595,6 +621,8 @@ fi
 
 # Check dependencies
 info "Checking dependencies..."
+info "Note: This script is a specialized fallback for starting Windows containers in rootless Podman."
+info "It does NOT fully replace docker-compose or podman-compose and is scoped for this specific use case only."
 check_dependencies
 check_kvm
 check_podman_version
