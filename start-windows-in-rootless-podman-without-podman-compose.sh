@@ -477,8 +477,10 @@ start_container() {
                 abs_host_path=$(realpath -m "$host_path" 2>/dev/null || readlink -f "$host_path" 2>/dev/null || echo "$host_path")
             fi
             
-            # Create directory if it doesn't exist
-            if [[ ! -d "$abs_host_path" ]]; then
+            # Create directory if it doesn't exist, or recreate if it has wrong ownership
+            if [[ -d "$abs_host_path" ]]; then
+                rm -rf "$abs_host_path" && mkdir -p "$abs_host_path" || warn "Failed to recreate directory: $abs_host_path"
+            else
                 mkdir -p "$abs_host_path" || warn "Failed to create directory: $abs_host_path"
             fi
             
