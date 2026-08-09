@@ -396,17 +396,17 @@ start_container() {
     current_uid=$(id -u)
     for volume in "${VOLUMES[@]}"; do
         # Safe variable expansion per volume entry (HOME, PWD, UID, CONTAINER_NAME, $(id -u), ~)
-        volume="${volume//\$\{HOME\}/$HOME}"
-        volume="${volume//\$HOME/$HOME}"
-        volume="${volume/#\~\//$HOME/}"
-        volume="${volume/#\~:/$HOME:}"
-        volume="${volume//\$\{PWD\}/$PWD}"
-        volume="${volume//\$PWD/$PWD}"
-        volume="${volume//\$\{UID\}/$current_uid}"
-        volume="${volume//\$UID/$current_uid}"
-        volume="${volume//\$\{CONTAINER_NAME\}/$CONTAINER_NAME}"
-        volume="${volume//\$CONTAINER_NAME/$CONTAINER_NAME}"
-        volume="${volume//\$(id -u)/$current_uid}"
+        # Use sed for complex patterns with default values (e.g., ${UID:-1000})
+        volume=$(echo "$volume" | sed -E "s/\\\${HOME}/$HOME/g")
+        volume=$(echo "$volume" | sed -E "s/\\\$HOME/$HOME/g")
+        volume=$(echo "$volume" | sed -E "s|^~(/|:)|$HOME\1|")
+        volume=$(echo "$volume" | sed -E "s/\\\${PWD}/$PWD/g")
+        volume=$(echo "$volume" | sed -E "s/\\\$PWD/$PWD/g")
+        volume=$(echo "$volume" | sed -E "s/\\\${UID(:[-_a-zA-Z0-9]+)?\}/$current_uid/g")
+        volume=$(echo "$volume" | sed -E "s/\\\$UID/$current_uid/g")
+        volume=$(echo "$volume" | sed -E "s/\\\${CONTAINER_NAME(:[-_a-zA-Z0-9]+)?\}/$CONTAINER_NAME/g")
+        volume=$(echo "$volume" | sed -E "s/\\\$CONTAINER_NAME/$CONTAINER_NAME/g")
+        volume=$(echo "$volume" | sed -E "s/\$(id -u)/$current_uid/g")
         
         # Extract host path (part before the first ':')
         local host_path="${volume%%:*}"
@@ -463,7 +463,10 @@ To fix, run one of the following:
                     fi
                 fi
             fi
-            volume_args+=("-v" "$volume_with_suffix")
+            # Use the resolved absolute path for the final volume argument
+            local target_and_flags="${volume_with_suffix#*:}"
+            local final_volume="${abs_host_path}:${target_and_flags}"
+            volume_args+=("-v" "$final_volume")
         else
             # Named volume logic
             local volume_name="${volume%%:*}"
