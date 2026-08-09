@@ -393,13 +393,16 @@ start_container() {
     # Create volumes from compose.yaml and prepare volume arguments
     local volume_args=()
     for volume in "${VOLUMES[@]}"; do
-        # Safe variable expansion per volume entry (HOME, PWD, ~)
+        # Safe variable expansion per volume entry (HOME, PWD, CONTAINER_NAME, $(id -u), ~)
         volume="${volume//\$\{HOME\}/$HOME}"
         volume="${volume//\$HOME/$HOME}"
         volume="${volume/#\~\//$HOME/}"
         volume="${volume/#\~:/$HOME:}"
         volume="${volume//\$\{PWD\}/$PWD}"
         volume="${volume//\$PWD/$PWD}"
+        volume="${volume//\$\{CONTAINER_NAME\}/$CONTAINER_NAME}"
+        volume="${volume//\$CONTAINER_NAME/$CONTAINER_NAME}"
+        volume="${volume//\$(id -u)/$(id -u)}"
         
         # Extract host path (part before the first ':')
         local host_path="${volume%%:*}"
