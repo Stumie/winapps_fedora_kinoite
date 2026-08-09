@@ -392,17 +392,21 @@ start_container() {
 
     # Create volumes from compose.yaml and prepare volume arguments
     local volume_args=()
+    local current_uid
+    current_uid=$(id -u)
     for volume in "${VOLUMES[@]}"; do
-        # Safe variable expansion per volume entry (HOME, PWD, CONTAINER_NAME, $(id -u), ~)
+        # Safe variable expansion per volume entry (HOME, PWD, UID, CONTAINER_NAME, $(id -u), ~)
         volume="${volume//\$\{HOME\}/$HOME}"
         volume="${volume//\$HOME/$HOME}"
         volume="${volume/#\~\//$HOME/}"
         volume="${volume/#\~:/$HOME:}"
         volume="${volume//\$\{PWD\}/$PWD}"
         volume="${volume//\$PWD/$PWD}"
+        volume="${volume//\$\{UID\}/$current_uid}"
+        volume="${volume//\$UID/$current_uid}"
         volume="${volume//\$\{CONTAINER_NAME\}/$CONTAINER_NAME}"
         volume="${volume//\$CONTAINER_NAME/$CONTAINER_NAME}"
-        volume="${volume//\$(id -u)/$(id -u)}"
+        volume="${volume//\$(id -u)/$current_uid}"
         
         # Extract host path (part before the first ':')
         local host_path="${volume%%:*}"
@@ -433,7 +437,17 @@ start_container() {
             
             # Resolve host path to absolute path for SELinux check
             local abs_host_path
-            abs_host_path=$(realpath -m "$host_path" 2>/dev/null || readlink -f "$host_path" 2>/dev/null || echo "$host_path")
+            if [[ "$host_path" == .* ]]; then
+                # Resolve relative paths relative to compose.yaml directory
+                abs_host_path=$(realpath -m "$(dirname "$compose_path")/$host_path" 2>/dev/null || readlink -f "$(dirname "$compose_path")/$host_path" 2>/dev/null || echo "$host_path")
+            else
+                abs_host_path=$(realpath -m "$host_path" 2>/dev/null || readlink -f "$host_path" 2>/dev/null || echo "$host_path")
+            fi
+            
+            # Create directory if it doesn't exist
+            if [[ ! -d "$abs_host_path" ]]; then
+                mkdir -p "$abs_host_path" || warn "Failed to create directory: $abs_host_path"
+            fi
             
             # Check SELinux context
             if [[ "$abs_host_path" == "/home"* || "$abs_host_path" == "/var/home"* ]] && command -v selinuxenabled &>/dev/null && selinuxenabled; then
