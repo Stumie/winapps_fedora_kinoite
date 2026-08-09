@@ -483,6 +483,11 @@ start_container() {
                 mkdir -p "$abs_host_path" || warn "Failed to create directory: $abs_host_path"
             fi
             
+            # Fix ownership in user namespace if directory exists with wrong permissions
+            if [[ -d "$abs_host_path" ]]; then
+                podman unshare chown -R "$current_uid:$current_uid" "$abs_host_path" 2>/dev/null || true
+            fi
+            
             # Check SELinux context
             if [[ "$abs_host_path" == "/home"* || "$abs_host_path" == "/var/home"* ]] && command -v selinuxenabled &>/dev/null && selinuxenabled; then
                 if [[ -e "$abs_host_path" ]]; then
