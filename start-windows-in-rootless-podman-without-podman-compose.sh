@@ -683,9 +683,9 @@ if [ "$(id -u)" = "0" ]; then
 fi
 
 # Check dependencies
-info "Checking dependencies..."
 info "Note: This script is a specialized fallback for starting Windows containers in rootless Podman."
 info "It does NOT fully replace docker-compose or podman-compose and is scoped for this specific use case only."
+info "Checking dependencies..."
 check_dependencies
 check_kvm
 check_podman_version
