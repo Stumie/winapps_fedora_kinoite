@@ -279,8 +279,7 @@ get_language_from_lang() {
 # Helper function for safe variable expansion in pure Bash (no sed/subshells)
 expand_variables() {
     local str="$1"
-    local current_uid
-    current_uid=$(id -u)
+    local current_uid="${UID:-$(id -u)}"
 
     # 1. Replace $(id -u)
     str="${str//\$(id -u)/$current_uid}"
@@ -290,7 +289,7 @@ expand_variables() {
     str="${str//\$HOME/$HOME}"
 
     # 3. Replace tilde ~ at start or after :
-    if [[ "$str" == ~* ]]; then
+    if [[ "$str" == ~/* || "$str" == ~ ]]; then
         str="${HOME}${str#~}"
     fi
     str="${str//:~/:$HOME}"
@@ -299,16 +298,22 @@ expand_variables() {
     str="${str//\$\{PWD\}/$PWD}"
     str="${str//\$PWD/$PWD}"
 
-    # 5. Replace ${UID:-...} and $UID (with while loop for default values)
-    while [[ "$str" =~ \$\{UID(:[-_a-zA-Z0-9]+)?\} ]]; do
-        str="${str/"${BASH_REMATCH[0]}"/$current_uid}"
-    done
+    # 5. Replace ${UID:-default} or ${UID} and $UID
+    if [[ "$str" =~ \$\{UID(:-?([^}]+))?\} ]]; then
+        local match="${BASH_REMATCH[0]}"
+        local default_val="${BASH_REMATCH[2]:-}"
+        local val="${current_uid:-$default_val}"
+        str="${str//"$match"/$val}"
+    fi
     str="${str//\$UID/$current_uid}"
 
-    # 6. Replace ${CONTAINER_NAME:-...} and $CONTAINER_NAME
-    while [[ "$str" =~ \$\{CONTAINER_NAME(:[-_a-zA-Z0-9]+)?\} ]]; do
-        str="${str/"${BASH_REMATCH[0]}"/$CONTAINER_NAME}"
-    done
+    # 6. Replace ${CONTAINER_NAME:-default} or ${CONTAINER_NAME} and $CONTAINER_NAME
+    if [[ "$str" =~ \$\{CONTAINER_NAME(:-?([^}]+))?\} ]]; then
+        local match="${BASH_REMATCH[0]}"
+        local default_val="${BASH_REMATCH[2]:-}"
+        local val="${CONTAINER_NAME:-$default_val}"
+        str="${str//"$match"/$val}"
+    fi
     str="${str//\$CONTAINER_NAME/$CONTAINER_NAME}"
 
     echo "$str"
@@ -342,7 +347,7 @@ parse_compose_config() {
     mapfile -t values <<< "$yq_out"
 
     # Assign to variables
-    CONTAINER_NAME="${values[0]}"
+    CONTAINER_NAME=$(expand_variables "${values[0]}")
     IMAGE="${values[1]}"
     VERSION="${values[2]}"
     DISK_SIZE="${values[3]}"
