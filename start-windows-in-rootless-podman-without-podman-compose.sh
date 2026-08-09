@@ -485,7 +485,11 @@ start_container() {
             
             # Fix ownership in user namespace if directory exists with wrong permissions
             if [[ -d "$abs_host_path" ]]; then
-                podman unshare chown -R "$current_uid:$current_uid" "$abs_host_path" 2>/dev/null || true
+                if [[ "$DEBUG" = "true" ]]; then
+                    podman unshare bash -c 'find "$1" ! -user 0 -exec chown 0:0 {} +' _ "$abs_host_path" || warn "Failed to fix ownership for: $abs_host_path"
+                else
+                    podman unshare bash -c 'find "$1" ! -user 0 -exec chown 0:0 {} +' _ "$abs_host_path" 2>/dev/null || true
+                fi
             fi
             
             # Check SELinux context
