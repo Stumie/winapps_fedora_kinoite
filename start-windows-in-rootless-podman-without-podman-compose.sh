@@ -276,6 +276,44 @@ get_language_from_lang() {
     esac
 }
 
+# Helper function for safe variable expansion in pure Bash (no sed/subshells)
+expand_variables() {
+    local str="$1"
+    local current_uid
+    current_uid=$(id -u)
+
+    # 1. Replace $(id -u)
+    str="${str//\$(id -u)/$current_uid}"
+
+    # 2. Replace ${HOME} and $HOME
+    str="${str//\$\{HOME\}/$HOME}"
+    str="${str//\$HOME/$HOME}"
+
+    # 3. Replace tilde ~ at start or after :
+    if [[ "$str" == ~* ]]; then
+        str="${HOME}${str#~}"
+    fi
+    str="${str//:~/:$HOME}"
+
+    # 4. Replace ${PWD} and $PWD
+    str="${str//\$\{PWD\}/$PWD}"
+    str="${str//\$PWD/$PWD}"
+
+    # 5. Replace ${UID:-...} and $UID (with while loop for default values)
+    while [[ "$str" =~ \$\{UID(:[-_a-zA-Z0-9]+)?\} ]]; do
+        str="${str/"${BASH_REMATCH[0]}"/$current_uid}"
+    done
+    str="${str//\$UID/$current_uid}"
+
+    # 6. Replace ${CONTAINER_NAME:-...} and $CONTAINER_NAME
+    while [[ "$str" =~ \$\{CONTAINER_NAME(:[-_a-zA-Z0-9]+)?\} ]]; do
+        str="${str/"${BASH_REMATCH[0]}"/$CONTAINER_NAME}"
+    done
+    str="${str//\$CONTAINER_NAME/$CONTAINER_NAME}"
+
+    echo "$str"
+}
+
 # Parse all compose values in a single yq call (safe, no eval)
 parse_compose_config() {
     local compose_path=$1
@@ -312,7 +350,7 @@ parse_compose_config() {
     CPU_CORES="${values[5]}"
     USERNAME="${values[6]}"
     PASSWORD="${values[7]}"
-    WIN_HOME="${values[8]}"
+    WIN_HOME=$(expand_variables "${values[8]}")
     RESTART_POLICY="${values[9]}"
     
     # Parse and sanitize STOP_TIMEOUT
@@ -339,7 +377,7 @@ parse_compose_config() {
     local volumes_raw
     volumes_raw=$("$YQ_PATH" eval -r '.services.windows.volumes // [] | join("\n")' "$compose_path")
     if [[ -n "$volumes_raw" ]] && [[ "$volumes_raw" != "null" ]]; then
-        IFS=$'\n' read -ra VOLUMES <<< "$volumes_raw"
+        mapfile -t VOLUMES <<< "$volumes_raw"
     else
         # Fallback: Use default volumes if none specified in compose.yaml
         VOLUMES=("data:/storage" "$(dirname "$compose_path")/oem:/oem")
@@ -395,18 +433,8 @@ start_container() {
     local current_uid
     current_uid=$(id -u)
     for volume in "${VOLUMES[@]}"; do
-        # Safe variable expansion per volume entry (HOME, PWD, UID, CONTAINER_NAME, $(id -u), ~)
-        # Use sed for complex patterns with default values (e.g., ${UID:-1000})
-        volume=$(echo "$volume" | sed -E "s/\\\${HOME}/$HOME/g")
-        volume=$(echo "$volume" | sed -E "s/\\\$HOME/$HOME/g")
-        volume=$(echo "$volume" | sed -E "s|^~(/|:)|$HOME\1|")
-        volume=$(echo "$volume" | sed -E "s/\\\${PWD}/$PWD/g")
-        volume=$(echo "$volume" | sed -E "s/\\\$PWD/$PWD/g")
-        volume=$(echo "$volume" | sed -E "s/\\\${UID(:[-_a-zA-Z0-9]+)?\}/$current_uid/g")
-        volume=$(echo "$volume" | sed -E "s/\\\$UID/$current_uid/g")
-        volume=$(echo "$volume" | sed -E "s/\\\${CONTAINER_NAME(:[-_a-zA-Z0-9]+)?\}/$CONTAINER_NAME/g")
-        volume=$(echo "$volume" | sed -E "s/\\\$CONTAINER_NAME/$CONTAINER_NAME/g")
-        volume=$(echo "$volume" | sed -E "s/\$(id -u)/$current_uid/g")
+        # Safe variable expansion per volume entry using pure Bash
+        volume=$(expand_variables "$volume")
         
         # Extract host path (part before the first ':')
         local host_path="${volume%%:*}"
