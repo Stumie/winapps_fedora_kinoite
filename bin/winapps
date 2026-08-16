@@ -652,7 +652,7 @@ function waCheckContainerRunning() {
             dprint "WINDOWS CREATED. BOOTING WINDOWS."
             notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Booting Windows."
             if command -v podman &>/dev/null && ! command -v podman-compose &>/dev/null; then
-                "${SCRIPT_DIR_PATH}/../start-windows-in-rootless-podman-without-podman-compose.sh"
+                "${SCRIPT_DIR_PATH}/winapps-src/start-windows-in-rootless-podman-without-podman-compose.sh"
             else
                 $COMPOSE_COMMAND --file "$COMPOSE_PATH" start &>/dev/null
             fi
@@ -688,7 +688,7 @@ function waCheckContainerRunning() {
             dprint "WINDOWS SHUT OFF. BOOTING WINDOWS."
             notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Booting Windows."
             if command -v podman &>/dev/null && ! command -v podman-compose &>/dev/null; then
-                "${SCRIPT_DIR_PATH}/../start-windows-in-rootless-podman-without-podman-compose.sh"
+                "${SCRIPT_DIR_PATH}/winapps-src/start-windows-in-rootless-podman-without-podman-compose.sh"
             else
                 $COMPOSE_COMMAND --file "$COMPOSE_PATH" start &>/dev/null
             fi
@@ -698,7 +698,7 @@ function waCheckContainerRunning() {
             dprint "WINDOWS DEAD. RECREATING WINDOWS CONTAINER."
             notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Re-creating and booting Windows."
             if command -v podman &>/dev/null && ! command -v podman-compose &>/dev/null; then
-                "${SCRIPT_DIR_PATH}/../start-windows-in-rootless-podman-without-podman-compose.sh"
+                "${SCRIPT_DIR_PATH}/winapps-src/start-windows-in-rootless-podman-without-podman-compose.sh"
             else
                 $COMPOSE_COMMAND --file "$COMPOSE_PATH" down &>/dev/null && $COMPOSE_COMMAND --file "$COMPOSE_PATH" up -d &>/dev/null
             fi
