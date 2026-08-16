@@ -652,9 +652,9 @@ function waCheckContainerRunning() {
             dprint "WINDOWS CREATED. BOOTING WINDOWS."
             notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Booting Windows."
             if command -v podman &>/dev/null && ! command -v podman-compose &>/dev/null; then
-                bash "${SCRIPT_DIR_PATH}/../start-windows-in-rootless-podman-without-podman-compose.sh"
+                "${SCRIPT_DIR_PATH}/../start-windows-in-rootless-podman-without-podman-compose.sh"
             else
-                $COMPOSE_COMMAND --file "$COMPOSE_PATH" up -d &>/dev/null
+                $COMPOSE_COMMAND --file "$COMPOSE_PATH" start &>/dev/null
             fi
             NEEDED_BOOT=true
             ;;
@@ -677,15 +677,20 @@ function waCheckContainerRunning() {
         "paused")
             dprint "WINDOWS PAUSED. RESUMING WINDOWS."
             notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Resuming Windows."
-            "$WAFLAVOR" unpause "$CONTAINER_NAME" &>/dev/null
+            
+            if command -v podman &>/dev/null && ! command -v podman-compose &>/dev/null; then
+                "$WAFLAVOR" unpause "$CONTAINER_NAME" &>/dev/null
+            else
+                $COMPOSE_COMMAND --file "$COMPOSE_PATH" unpause &>/dev/null
+            fi
             ;;
         "exited")
             dprint "WINDOWS SHUT OFF. BOOTING WINDOWS."
             notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Booting Windows."
             if command -v podman &>/dev/null && ! command -v podman-compose &>/dev/null; then
-                bash "${SCRIPT_DIR_PATH}/../start-windows-in-rootless-podman-without-podman-compose.sh"
+                "${SCRIPT_DIR_PATH}/../start-windows-in-rootless-podman-without-podman-compose.sh"
             else
-                $COMPOSE_COMMAND --file "$COMPOSE_PATH" up -d &>/dev/null
+                $COMPOSE_COMMAND --file "$COMPOSE_PATH" start &>/dev/null
             fi
             NEEDED_BOOT=true
             ;;
@@ -693,7 +698,7 @@ function waCheckContainerRunning() {
             dprint "WINDOWS DEAD. RECREATING WINDOWS CONTAINER."
             notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Re-creating and booting Windows."
             if command -v podman &>/dev/null && ! command -v podman-compose &>/dev/null; then
-                bash "${SCRIPT_DIR_PATH}/../start-windows-in-rootless-podman-without-podman-compose.sh"
+                "${SCRIPT_DIR_PATH}/../start-windows-in-rootless-podman-without-podman-compose.sh"
             else
                 $COMPOSE_COMMAND --file "$COMPOSE_PATH" down &>/dev/null && $COMPOSE_COMMAND --file "$COMPOSE_PATH" up -d &>/dev/null
             fi
