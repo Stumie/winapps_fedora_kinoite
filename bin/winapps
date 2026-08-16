@@ -648,11 +648,12 @@ function waCheckContainerRunning() {
     # Docker: 'created', 'restarting', 'running', 'removing', 'paused', 'exited' or 'dead'.
     # Podman: 'created', 'running', 'paused', 'exited' or 'unknown'.
     case "$CONTAINER_STATE" in
-        "created")
+         "created")
             dprint "WINDOWS CREATED. BOOTING WINDOWS."
             notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Booting Windows."
+            # --script-mode: Unterdrückt das automatische Öffnen des Browsers, da dies von anderen Skripten gesteuert wird.
             if command -v podman &>/dev/null && ! command -v podman-compose &>/dev/null; then
-                "${SCRIPT_DIR_PATH}/winapps-src/start-windows-in-rootless-podman-without-podman-compose.sh"
+                "${SCRIPT_DIR_PATH}/winapps-src/start-windows-in-rootless-podman-without-podman-compose.sh" --script-mode
             else
                 $COMPOSE_COMMAND --file "$COMPOSE_PATH" start &>/dev/null
             fi
@@ -684,21 +685,23 @@ function waCheckContainerRunning() {
                 $COMPOSE_COMMAND --file "$COMPOSE_PATH" unpause &>/dev/null
             fi
             ;;
-        "exited")
+         "exited")
             dprint "WINDOWS SHUT OFF. BOOTING WINDOWS."
             notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Booting Windows."
+            # --script-mode: Unterdrückt das automatische Öffnen des Browsers, da dies von anderen Skripten gesteuert wird.
             if command -v podman &>/dev/null && ! command -v podman-compose &>/dev/null; then
-                "${SCRIPT_DIR_PATH}/winapps-src/start-windows-in-rootless-podman-without-podman-compose.sh"
+                "${SCRIPT_DIR_PATH}/winapps-src/start-windows-in-rootless-podman-without-podman-compose.sh" --script-mode
             else
                 $COMPOSE_COMMAND --file "$COMPOSE_PATH" start &>/dev/null
             fi
             NEEDED_BOOT=true
             ;;
-        "dead")
+         "dead")
             dprint "WINDOWS DEAD. RECREATING WINDOWS CONTAINER."
             notify-send --expire-time=4000 --icon="dialog-info" --app-name="WinApps" --urgency="low" "WinApps" "Re-creating and booting Windows."
+            # --script-mode: Unterdrückt das automatische Öffnen des Browsers, da dies von anderen Skripten gesteuert wird.
             if command -v podman &>/dev/null && ! command -v podman-compose &>/dev/null; then
-                "${SCRIPT_DIR_PATH}/winapps-src/start-windows-in-rootless-podman-without-podman-compose.sh"
+                "${SCRIPT_DIR_PATH}/winapps-src/start-windows-in-rootless-podman-without-podman-compose.sh" --script-mode
             else
                 $COMPOSE_COMMAND --file "$COMPOSE_PATH" down &>/dev/null && $COMPOSE_COMMAND --file "$COMPOSE_PATH" up -d &>/dev/null
             fi

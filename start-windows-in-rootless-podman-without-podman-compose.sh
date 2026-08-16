@@ -12,6 +12,14 @@ readonly EC_YQ_DOWNLOAD_FAILED=6
 readonly EC_INVALID_ARG=7
 readonly EC_TIMEOUT=8
 
+# Script mode flag
+SCRIPT_MODE=false
+
+# Validate SCRIPT_MODE if set externally
+if [[ "$SCRIPT_MODE" != "true" && "$SCRIPT_MODE" != "false" && -n "$SCRIPT_MODE" ]]; then
+    error_exit "$EC_INVALID_ARG" "Invalid SCRIPT_MODE value: $SCRIPT_MODE. Must be 'true' or 'false'."
+fi
+
 # Colors
 readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
@@ -79,6 +87,7 @@ Start a Windows VM in rootless Podman without podman-compose and open the VNC we
 
 Options:
   --compose-path PATH   Specify a custom path to compose.yaml
+  --script-mode         Run in script mode (do not open browser automatically)
   --help                Show this help message
 
 Environment Variables:
@@ -86,6 +95,7 @@ Environment Variables:
 
 Example:
   $(basename "$0") --compose-path /custom/path/compose.yaml
+  $(basename "$0") --script-mode
 EOF
 }
 
@@ -667,6 +677,10 @@ while [[ $# -gt 0 ]]; do
             COMPOSE_PATH="$2"
             shift 2
             ;;
+        --script-mode)
+            SCRIPT_MODE=true
+            shift
+            ;;
         --help)
             show_help
             exit 0
@@ -716,9 +730,13 @@ check_container_ready
 # Check VNC
 check_vnc_availability
 
-# Open VNC in browser
-info "Opening VNC web interface at http://127.0.0.1:8006/"
-xdg-open "http://127.0.0.1:8006/" || warn "Failed to open browser. Please open http://127.0.0.1:8006/ manually."
+# Open VNC in browser only if not in script mode
+if [[ "$SCRIPT_MODE" != "true" ]]; then
+    info "Opening VNC web interface at http://127.0.0.1:8006/"
+    xdg-open "http://127.0.0.1:8006/" || warn "Failed to open browser. Please open http://127.0.0.1:8006/ manually."
+else
+    info "Skipping browser launch (script mode enabled)."
+fi
 
 log "Script completed successfully."
 exit 0
